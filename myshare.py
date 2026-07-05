@@ -136,7 +136,7 @@ class ShareTree:
                 elif level == 4:
                    prev_parent_level_4 = f"{account} ({user})"
                 current_parent = f"{account} ({user})"
-  
+
             elif len(items) == 5:
                 # root node
                 items.insert(1, "--")
@@ -185,7 +185,7 @@ class ShareTree:
                             sibling.data.level_fs])
         members.sort(key=lambda x: x[1], reverse=True)
         w_idx = 4
-        w_name = 10 
+        w_name = 10
         w_dept = 14
         w_sal = 14
         #TODO add proportions
@@ -198,17 +198,22 @@ class ShareTree:
                usage = self.colorize(usage, color="red")
             s += f"{idx:>{w_idx}} {user:>{w_name}} {usage:>{w_dept}} {fs:>{w_sal},.5f} {lfs:>{w_sal}}\n"
         return s
- 
+
 
     @staticmethod
     def add_proportions(values: List[str], decimals: int=0) -> List[str]:
         """Add the proportion of each value in parentheses."""
+        if values == []:
+            return []
         values = list(map(int, values))
         total = sum(values)
         if total == 0:
             proportions = ["(--)"] * len(values)
         else:
-            proportions = [f"({round(100 * value / total, decimals)}%)" for value in values]
+            if decimals == 0:
+                proportions = [f"({round(100 * value / total)}%)" for value in values]
+            else:
+                proportions = [f"({round(100 * value / total, decimals)}%)" for value in values]
         width_pro = max(map(len, proportions))
         vp = []
         for v, p in zip(values, proportions):
@@ -216,7 +221,7 @@ class ShareTree:
             vp.append(f"{str(v)}{spaces}{p}")
         return vp
 
- 
+
     def depts_with_shares(self, node_id: str, decimals: int=0) -> str:
         """List the departments/groups and their shares. This allows users to
            see who has contributed."""
@@ -295,7 +300,7 @@ class ShareTree:
 
     def get_levelfs_rank(self, node_id: str) -> str:
         """Return the rank of the LevelFS values at the level of the specified
-           node ."""
+           node."""
         levelfs = [self.tree[node_id].data.level_fs]
         for sibling in self.tree.siblings(node_id):
             levelfs.append(sibling.data.level_fs)
@@ -319,7 +324,9 @@ class ShareTree:
         tree = Tree()
         tree.create_node(tag=path_names[0].split()[0], identifier=path_names[0])
         parent = path_names[0]
+        term = Terminal()
         user = path_names[-1].split("(")[-1].replace(")", "")
+        user = f"{term.bold}{user}{term.normal}"
         for i, p in enumerate(path_names[1:]):
             rank = self.get_levelfs_rank(p)
             num_users = len(self.tree.leaves(p))
@@ -345,8 +352,8 @@ class ShareTree:
         if style == "bold":
             txt = f"{term.bold}{txt}"
         return f"{txt}{term.normal}"
- 
- 
+
+
 
 if __name__ == "__main__":
 
@@ -409,7 +416,7 @@ if __name__ == "__main__":
                  "for periods of time. Then the effective shares increases for everyone else.\n")
             print(s)
             print("Your fairshare is approximately equal to 1 - levelFS rank@dept / num_depts\n")
-            print("More important than shares is your LevelFS Rank at level 2"\n)
+            print("More important than shares is your LevelFS Rank at level 2\n")
             print("\n\nBelow is the 'webb' research group under the 'cbe' association:\n\n")
             print(mytree.research_group_table(node_id, args.user))
             mytree.draw_subtree(node_id)
