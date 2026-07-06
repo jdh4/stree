@@ -41,9 +41,7 @@ WIDTH = 80
 
 class TreeNode:
 
-    """
-    Represents a single node (Account or User) in the sshare hierarchy.
-    """
+    """Represents a single node (Account or User) in the sshare hierarchy."""
     def __init__(self,
                  account,
                  user,
@@ -67,6 +65,47 @@ class TreeNode:
     def __str__(self):
         return (f"level: {self.level}, account: {self.account}, user: {self.user}, raw shares: {self.raw_shares}, "
                 f"effective usage: {self.effectv_usage}, fs: {self.fair_share}, lfs: {self.level_fs}")
+
+
+class SingleJobBreakdown:
+
+    def __init__(self, user: str, fairshare: float) -> None:
+        self.user = user
+        self.fairshare = fairshare
+        self.num_jobs = 0
+        self.job_dict = dict()
+
+    def get_job_data(self) -> None:
+        #fmt = "Account,User,RawShares,NormShares,RawUsage,EffectvUsage,FairShare,LevelFS"
+        cmd = f"sprio -u {self.user} -S 'Y'"
+        output = subprocess.run(cmd,
+                                stdout=subprocess.PIPE,
+                                encoding="utf8",
+                                check=True,
+                                text=True,
+                                shell=True,
+                                timeout=30)
+        self.lines = output.stdout.splitlines()
+
+    def parse(self):
+        self.num_jobs = len(self.lines) - 1
+        if self.num_jobs > 0:
+            heading = self.lines[0].split()
+            job = self.lines[-1].split()
+            self.job_dict = dict(zip(heading, job))
+
+    def explain(self):
+        # need to connect partition to the particular slurm account of the user (pli vs. other)
+        # need to also call "sprio -w"
+        print("Why is your fairshare value important?")
+        print("Let's look at your current highest priority job.")
+        print("USER  JOBID  QOS  AGE  JOBSIZE")
+        print(f'{self.job_dict["USER"]} {self.job_dict["JOBID"]} {self.job_dict["QOS"]} {self.job_dict["AGE"]} {self.job_dict["JOBSIZE"]}\n')
+        print("Job priority is calculated as a weighted sum:\n")
+        print("   priority = w_a * AGE + w_q * QOS + w_f * FAIRSHARE")
+        print(f"   priority = w_a * AGE + w_q * QOS + 12000 * {self.fairshare}")
+        print(f"   priority = w_a * AGE + w_q * QOS + {round(12000 * self.fairshare)}")
+        print("")
 
 
 class ShareTree:
@@ -234,41 +273,85 @@ class ShareTree:
         return vp
 
 
-    def depts_with_shares(self, node_id: str, decimals: int=0) -> str:
+    def depts_with_shares(self,
+                          node_id: str,
+                          sort_by: str="LevelFS",
+                          decimals: int=0,
+                          tabbing: int=0) -> str:
         """List the data of the children of the specified parent. This can be
            used to show which high-level associations have contributed."""
         rows = []
         for child in self.tree.children(node_id):
+            minfs = "--"
+            maxfs = "--"
+            if node_id == "total (--)":
+                if not child.is_leaf():
+                    nodes = self.tree.leaves(child.identifier)
+                    minfs = min([float(node.data.fair_share) for node in nodes if "(--)" not in node.identifier])
+                    maxfs = max([float(node.data.fair_share) for node in nodes if "(--)" not in node.identifier])
+            minfs = minfs if minfs == "--" else str(round(minfs, 5))
+            maxfs = maxfs if maxfs == "--" else str(round(maxfs, 5))
+            if len(minfs) == 6:
+                minfs += "0"
+            if len(maxfs) == 6:
+                maxfs += "0"
             rows.append([child.data.account,
+                         child.data.user,
                          int(child.data.raw_shares),
                          child.data.raw_usage,
-                         child.data.level_fs,
-                         len(self.tree.leaves(child.identifier))])
-        rows.sort(key=lambda x: x[1], reverse=True)
+                         child.data.fair_share,
+                         float(child.data.level_fs),
+                         len(self.tree.leaves(child.identifier)),
+                         minfs,
+                         maxfs])
+        user_level = True if self.tree.children(node_id)[0].is_leaf() else False
+        if sort_by == "LevelFS":
+            rows.sort(key=lambda x: x[5], reverse=True)
+        else:
+            rows.sort(key=lambda x: x[2], reverse=True)
         account = []
+        user = []
         shares = []
         usage = []
+        fair = []
         lfs = []
         users = []
+        minfs = []
+        maxfs = []
         for row in rows:
-            ac, sh, us, lf, ct = row
+            ac, ur, sh, us, fr, lf, ct, mn, mx = row
             account.append(ac)
+            user.append(ur)
             shares.append(str(sh))
             usage.append(us)
-            lfs.append(lf.replace("inf", "Infinity"))
+            fair.append(fr)
+            lfs.append("Infinity" if lf == float('inf') else self.format_levelfs(str(lf)))
             users.append(ct)
+            minfs.append(mn)
+            maxfs.append(mx)
         shares = self.add_proportions(shares, decimals)
-        width_idx = len(str(len(account)))
+        width_idx = len(str(len(user))) if user_level else len(str(len(account)))
         width_account = max(len("Account"), max(map(len, account)))
+        width_user = max(len("User"), max(map(len, user)))
         width_shares = max(len("Shares"), max(map(len, shares)))
         width_usage = max(len("RawUsage"), max(map(len, usage)))
+        width_fair = max(len("FairShare"), max(map(len, fair)))
         width_lfs = max(len("LevelFS"), max(map(len, lfs)))
         width_users = max(len("NumUsers"), max(map(len, map(str, users))))
+        width_minfs = max(len("min(FairShare)"), max(map(len, minfs)))
+        width_maxfs = max(len("max(FairShare)"), max(map(len, maxfs)))
         sp = " " * 3
-        rows = f"{'':>{width_idx}} {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage  ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'NumUsers ':>{width_users}}\n"
-        rows += f"{' ' * width_idx} {'-' * (width_account + width_shares + width_usage + width_lfs + width_users + 4 * len(sp))}\n"
-        for i, (ac, sh, us, lf, ct) in enumerate(zip(account, shares, usage, lfs, users)):
-            rows += f"{i+1:>{width_idx}} {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}\n"
+        tb = " " * 5 * tabbing
+        if user_level:
+            rows = f"{tb}{'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage  ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
+            rows += f"{tb}{' ' * width_idx}  {'-' * (width_user + width_shares + width_usage + width_lfs + width_fair + 4 * len(sp))}\n"
+            for i, (ur, sh, us, lf, fr) in enumerate(zip(user, shares, usage, lfs, fair)):
+                rows += f"{tb}{i+1:>{width_idx}}  {ur:>{width_user}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{fr:>{width_fair}}\n"
+        else:
+            rows = f"{tb}{'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage  ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'NumUsers ':>{width_users}}{sp}{'min(FairShare)':>{width_minfs}}{sp}{'max(FairShare)':>{width_maxfs}}\n"
+            rows += f"{tb}{' ' * width_idx}  {'-' * (width_account + width_shares + width_usage + width_lfs + width_users + width_minfs + width_maxfs + 6 * len(sp))}\n"
+            for i, (ac, sh, us, lf, ct, mn, mx) in enumerate(zip(account, shares, usage, lfs, users, minfs, maxfs)):
+                rows += f"{tb}{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}{sp}{mn:>{width_minfs}}{sp}{mx:>{width_maxfs}}\n"
         return rows
 
 
@@ -331,7 +414,7 @@ class ShareTree:
         pairs.sort(key=lambda x: x[1], reverse=True)
         for j, (i, lf) in enumerate(pairs):
             if i == 0:
-                return f"{j + 1} of {len(pairs)}"
+                return f"{j + 1}/{len(pairs)}"
 
     @staticmethod
     def format_levelfs(lfs: str) -> str:
@@ -346,7 +429,7 @@ class ShareTree:
         elif lfs < 10000 and lfs >= 1:
             return str(round(lfs))
         else:
-            return lfs
+            return str(lfs)
 
 
     def draw_subtree(self, node_id: str, netid: str) -> None:
@@ -359,6 +442,7 @@ class ShareTree:
         parent = path_names[0]
         term = Terminal()
         user = f"{term.bold}{netid}{term.normal}"
+        total_shares = self.get_total_shares()
         for i, p in enumerate(path_names[1:]):
             rank = self.get_levelfs_rank(p)
             level = self.format_levelfs(self.tree[p].data.level_fs)
@@ -368,7 +452,7 @@ class ShareTree:
             elif i + 1 == len(path_names[1:]):
                 tree.create_node(tag=f"{user} (LevelFS Rank: {rank})", identifier=p, parent=parent)
             else:
-                tree.create_node(tag=f"{p.split()[0]} (LevelFS Rank: {rank}, Shares: {shares}, LevelFS: {level})", identifier=p, parent=parent)
+                tree.create_node(tag=f"{p.split()[0]} (LevelFS: {level}, LevelFS Rank: {rank}, Shares: {shares}/{total_shares})", identifier=p, parent=parent)
             parent = p
         tree.show()
 
@@ -401,7 +485,9 @@ class ShareTree:
             msg = (f"You have a decent fairshare value of {fs} and {rank}. You can expect "
                    "intermediate queue times.")
         elif fs >= 0.0 and fs < 0.5:
-            msg = (f"Fairshare varies between 0 to 1. The larger the value the larger the contribution to job priority. Bad news! You have a low fairshare value of {fs}. Your fairshare rank is {rank} users which puts you in the {direction} {pct} percentile. You can expect "
+            msg = ("Fairshare varies between 0 to 1. The larger the value the larger the contribution "
+                   f"to job priority. Bad news! You have a low fairshare value of {fs}. Your fairshare "
+                   f"rank is {rank} users which puts you in the {direction} {pct} percentile. You can expect "
                    "long queue times.\n\nThe tree at the top helps explain why your fairshare is low.")
         return wrapper.fill(msg)
 
@@ -419,6 +505,8 @@ if __name__ == "__main__":
     mytree.parse(args.user)
     if args.debug:
         print(mytree.analyze())
+    if mytree.num_accounts == 0:
+        print(f"{args.user} not found in the sshare tree.")
 
     for node_id in mytree.tree.expand_tree():
         if node_id.endswith(f" ({args.user})"):
@@ -433,13 +521,26 @@ if __name__ == "__main__":
             print("")
             print(mytree.explain(fs))
             print(f"Department shares: {mytree.get_dept(node_id)}\n")
+            j = SingleJobBreakdown(args.user, fs)
+            j.get_job_data()
+            j.parse()
+            if j.num_jobs > 1:
+                j.explain()
             if args.verbose:
-                print("\n\nBy Research Group\n\n")
+                path = list(mytree.tree.rsearch(node_id))
+                path.reverse()
+                for i, node_id in enumerate(path):
+                    if node_id == "root (--)" or mytree.tree[node_id].is_leaf():
+                        continue
+                    print(" " * 5 * (i - 1) , node_id.split()[0], "at level", mytree.tree.level(node_id))
+                    print(mytree.depts_with_shares(node_id=node_id, decimals=1, tabbing=i-1))
+
+                #print("\n\nBy Research Group\n\n")
                 #level3 = mytree.tree.parent(node_id).identifier
                 #level3 = mytree.tree.ancestor(node_id, level=2).identifier
                 #print(mytree.depts_with_shares(node_id=level3, decimals=1))
-                print("\n\nHere are the departments sorted by contributions or shares:\n\n")
-                print(mytree.depts_with_shares(node_id="total (--)", decimals=1))
+                #print("\n\nHere are the departments sorted by contributions or shares:\n\n")
+                #print(mytree.depts_with_shares(node_id="total (--)", decimals=1))
                 s = ("Accounts with LevelFS > 1 have been under-served by Slurm. User within "
                      "those accounts will receive a priority boost. Similarly, accounts with "
                      "LevelFS < 1 will receive a priority penalty since they have been over-served. "
@@ -452,8 +553,7 @@ if __name__ == "__main__":
                 print(s)
                 print("Your fairshare is approximately equal to 1 - levelFS rank@dept / num_depts\n")
                 print("More important than shares is your LevelFS Rank at level 2\n")
-                print("\n\nBelow is the 'webb' research group under the 'cbe' association:\n\n")
-                print(mytree.research_group_table(node_id, args.user))
+                #print(mytree.research_group_table(node_id, args.user))
             if mytree.num_accounts > 1:
                 print("\n\n==============================================================================\n\n")
 

@@ -4,3 +4,4 @@ MORE_INFO_URL = "https://researchcomputing.princeton.edu/support/knowledge-base/
 SPECIAL_DEPTS = ["shs", "subotnik"]
 STANDARD_NODE = "total (--)"
 OTHER_NODE = "pli (--)"
+FACTORS = ["SITE", "AGE", "FAIRSHARE", "JOBSIZE", "QOS"]
