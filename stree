@@ -1,0 +1,97 @@
+#!/home/jdh4/.conda/envs/tree-env/bin/python
+
+"""Leading spaces in each line of the output of sshare are used to determine
+   the level of the tree.
+
+   Note that andlinger has users at level 5 in the tree.
+
+   from sharetree import ShareTree
+   mytree = ShareTree(); mytree.get_raw_data(); mytree.parse()
+"""
+
+
+import os
+import argparse
+from textwrap import TextWrapper
+import config as c
+from sharetree import ShareTree
+from single_job import SingleJobBreakdown
+try:
+    from blessed import Terminal
+    blessed_is_available = True
+except ModuleNotFoundError:
+    blessed_is_available = False
+
+
+WIDTH = 80
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="myshare - Shares of a user in plain language")
+    parser.add_argument("-u", "--user", type=str, default=os.environ["USER"], help="NetID of the user")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show more details")
+    parser.add_argument("-d", "--debug", action="store_true", help="Print debug info")
+    args = parser.parse_args()
+
+    term = Terminal()
+    mytree = ShareTree()
+    mytree.get_raw_data()
+    mytree.parse(args.user)
+    if args.debug:
+        print(mytree.analyze())
+    if mytree.num_accounts == 0:
+        print(f"{args.user} not found in the sshare tree.")
+
+    for node_id in mytree.tree.expand_tree():
+        if node_id.endswith(f" ({args.user})"):
+            print("-" * WIDTH)
+            print("stree".center(WIDTH))
+            print("-" * WIDTH)
+            mytree.draw_subtree(node_id, args.user)
+            fs = float(mytree.tree[node_id].data.fair_share)
+            print(mytree.format_fairshare(fs))
+            print("")
+            print(mytree.explain(fs))
+            print(f"Department shares: {mytree.get_dept(node_id)}\n")
+            if args.verbose:
+                path = list(mytree.tree.rsearch(node_id))
+                path.reverse()
+                for i, node_id in enumerate(path):
+                    if node_id == "root (--)" or mytree.tree[node_id].is_leaf():
+                        continue
+                    level2 = f"{node_id.split()[0]}"
+                    print(level2)
+                    user_dept = path[2].split()[0] if node_id == "total (--)" else ""
+                    print(mytree.depts_with_shares(node_id=node_id, decimals=1, tabbing=i-1, user_dept=user_dept), end="")
+                    if not mytree.tree.children(node_id)[0].is_leaf():
+                        print(f"{' ' * 5 * (i - 1)}|")
+                        print(f"{' ' * 5 * (i - 1)} ----", end="")
+                print("\n")
+                wrapper = TextWrapper(width=WIDTH)
+                s = ("Accounts with LevelFS > 1 have been under-served by Slurm. User within "
+                     "those accounts will receive a priority boost. Similarly, accounts with "
+                     "LevelFS < 1 will receive a priority penalty since they have been over-served. "
+                     "When all accounts are running the shares breakdown will "
+                     "reflect where the resources are allocated. The shares column "
+                     "reflects the limiting distribution or what to expect over long times. "
+                     "The good news for users in a department with 1 share or a small number of "
+                     "shares is that the contributing departments often run fewer jobs "
+                     "for periods of time. Then the effective shares increases for everyone else.\n")
+                print(wrapper.fill(s))
+                print("More important than shares is your LevelFS Rank at level 2\n")
+                j = SingleJobBreakdown(args.user, fs)
+                j.get_job_data()
+                j.parse()
+                if j.num_jobs > 1:
+                    j.explain()
+
+            if mytree.num_accounts > 1:
+                print("\n\n==============================================================================\n\n")
+
+    print("\n")
+    print("-" * 80)
+    print("For more details about your cluster share, run the following command:")
+    print("    $ stree --verbose")
+    print("\nFor more information about job priority, making a financial contribution\nto the cluster, additional GPUs at Princeton:")
+    print(f"    {c.MORE_INFO_URL}")

@@ -1,5 +1,5 @@
 import pytest
-from myshare import ShareTree
+from sharetree import ShareTree
 
 TEST2 = """root                                          0.000000 184107262492      1.000000
  root                      root          1    0.000081           0      0.000000   1.000000        inf
@@ -65,6 +65,9 @@ TEST = """root                                          0.000000 184107262492   
 def small_tree():
     sshare = ("root 1.0 2 3.0\n"
               " root root 1 2.0 3 4.0 5.0 6.0\n"
+              " total 1 2.0 3 4.0 5.0\n"
+              "  chem jdh4 1 2.0 3 4.0 5.0 6.0\n"
+              "  orfe jdh4 41 2.0 3 4.0 5.0 6.0\n"
               " pli 1 2.0 3 4.0 5.0\n"
               "  pli jdh4 1 2.0 3 4.0 5.0 6.0\n")
     return sshare
@@ -74,7 +77,7 @@ def test_simple_example(small_tree):
     t = ShareTree()
     t.get_raw_data(text=small_tree)
     t.parse("aturing")
-    assert len(t.tree.leaves()) == 2
+    assert len(t.tree.leaves()) == 4
 
 
 def test_parse_count():
@@ -100,11 +103,10 @@ def test_get_levelfs_rank():
               "  pi5 u5 1 2 3 4 5 6\n")
     t.get_raw_data(text=sshare)
     t.parse("aturing")
-    assert t.get_levelfs_rank("cbe (--)") == "3 of 4"
-    assert t.get_levelfs_rank("lsi (--)") == "4 of 4"
-    assert t.get_levelfs_rank("mae (--)") == "1 of 4"
-    assert t.get_levelfs_rank("pni (--)") == "1 of 4"
-
+    assert t.get_levelfs_rank("cbe (--)") == "3/4"
+    assert t.get_levelfs_rank("lsi (--)") == "4/4"
+    assert t.get_levelfs_rank("mae (--)") == "1/4"
+    assert t.get_levelfs_rank("pni (--)") == "1/4"
     """Test for one association."""
     t = ShareTree()
     sshare = ("root 1 2 3\n"
@@ -112,7 +114,7 @@ def test_get_levelfs_rank():
               "  pi1 u1 1 2 3 4 5 6\n")
     t.get_raw_data(text=sshare)
     t.parse("aturing")
-    assert t.get_levelfs_rank("cbe (--)") == "1 of 1"
+    assert t.get_levelfs_rank("cbe (--)") == "1/1"
 
 
 def test_add_proportions():
@@ -127,3 +129,28 @@ def test_add_proportions():
     shares = ["49", "14", "1", "119"]
     expected = ["49 (26.8%)", "14  (7.7%)", "1  (0.5%)", "119 (65.0%)"]
     assert t.add_proportions(shares, decimals=1) == expected
+
+
+def test_format_levelfs():
+    t = ShareTree()
+    assert t.format_levelfs(1.1) == "1"
+    assert t.format_levelfs(0.1) == "0.1"
+    assert t.format_levelfs(0.10) == "0.1"
+    assert t.format_levelfs(0.042) == "0.04"
+    assert t.format_levelfs(0.0042) == "0.004"
+    assert t.format_levelfs(123.456) == "123"
+    assert t.format_levelfs(float("inf")) == "infinity"
+    assert t.format_levelfs(1.234e+03) == "1234"
+    assert t.format_levelfs(1.234e+12) == "1.23e+12"
+    assert t.format_levelfs(0.0095) == "0.009"
+    assert t.format_levelfs(1.234e-06) == "1.23e-06"
+
+
+def test_get_total_shares(small_tree):
+    t = ShareTree()
+    t.get_raw_data(text=small_tree)
+    t.parse("aturing")
+    assert t.get_total_shares() == 42
+    assert t.get_total_shares("total (--)") == 42
+    assert t.get_total_shares("pli (--)") == 1
+    assert t.get_total_shares("root (--)") == 3

@@ -1,28 +1,3 @@
-#!/home/jdh4/.conda/envs/tree-env/bin/python
-
-"""There are three children under root:
-       1. root
-       2. pli
-       3. total
-
-   Note that andlinger has users at level 5 in the tree. This is believed to be
-   true for other accounts somewhere in the three.
-
-   Leading spaces in each line of the output of sshare are used to determine
-   the level of the tree.
-
-   from longwait import ShareTree
-   mytree = ShareTree(); mytree.get_raw_data(); mytree.parse()
-
-   print(mytree.tree["shs (--)"].data)
-
-   for i, c in enumerate(mytree.tree.children("pni (--)")):
-       print(i+1, c.data)
-"""
-
-
-import os
-import argparse
 import subprocess
 from textwrap import TextWrapper
 from treelib import Tree
@@ -30,7 +5,7 @@ from typing import Optional
 from typing import Union
 from typing import List
 from typing import Tuple
-import config as c
+#import config as c
 try:
     from blessed import Terminal
     blessed_is_available = True
@@ -38,6 +13,7 @@ except ModuleNotFoundError:
     blessed_is_available = False
 
 WIDTH = 80
+
 
 class TreeNode:
 
@@ -67,52 +43,12 @@ class TreeNode:
                 f"effective usage: {self.effectv_usage}, fs: {self.fair_share}, lfs: {self.level_fs}")
 
 
-class SingleJobBreakdown:
-
-    def __init__(self, user: str, fairshare: float) -> None:
-        self.user = user
-        self.fairshare = fairshare
-        self.num_jobs = 0
-        self.job_dict = dict()
-
-    def get_job_data(self) -> None:
-        #fmt = "Account,User,RawShares,NormShares,RawUsage,EffectvUsage,FairShare,LevelFS"
-        cmd = f"sprio -u {self.user} -S 'Y'"
-        output = subprocess.run(cmd,
-                                stdout=subprocess.PIPE,
-                                encoding="utf8",
-                                check=True,
-                                text=True,
-                                shell=True,
-                                timeout=30)
-        self.lines = output.stdout.splitlines()
-
-    def parse(self):
-        self.num_jobs = len(self.lines) - 1
-        if self.num_jobs > 0:
-            heading = self.lines[0].split()
-            job = self.lines[-1].split()
-            self.job_dict = dict(zip(heading, job))
-
-    def explain(self):
-        # need to connect partition to the particular slurm account of the user (pli vs. other)
-        # need to also call "sprio -w"
-        print("Why is your fairshare value important?")
-        print("Let's look at your current highest priority job.")
-        print("USER  JOBID  QOS  AGE  JOBSIZE")
-        print(f'{self.job_dict["USER"]} {self.job_dict["JOBID"]} {self.job_dict["QOS"]} {self.job_dict["AGE"]} {self.job_dict["JOBSIZE"]}\n')
-        print("Job priority is calculated as a weighted sum:\n")
-        print("   priority = w_a * AGE + w_q * QOS + w_f * FAIRSHARE")
-        print(f"   priority = w_a * AGE + w_q * QOS + 12000 * {self.fairshare}")
-        print(f"   priority = w_a * AGE + w_q * QOS + {round(12000 * self.fairshare)}")
-        print("")
-
-
 class ShareTree:
 
     def __init__(self) -> None:
         """Create a tree instance and initialize num_accounts which tracks the
            number of accounts for the user."""
+        self.lines = []
         self.tree = Tree()
         self.num_accounts = 0
 
@@ -124,13 +60,13 @@ class ShareTree:
             self.lines = text.splitlines()
         else:
             fmt = "Account,User,RawShares,NormShares,RawUsage,EffectvUsage,FairShare,LevelFS"
-            cmd = f"sshare -a -l -n -o {fmt}"
+            cmd = ["sshare", "-a", "-l", "-n", "-o", fmt]
             output = subprocess.run(cmd,
                                     stdout=subprocess.PIPE,
                                     encoding="utf8",
                                     check=True,
                                     text=True,
-                                    shell=True,
+                                    shell=False,
                                     timeout=30)
             self.lines = output.stdout.splitlines()
 
@@ -272,39 +208,43 @@ class ShareTree:
             vp.append(f"{str(v)}{spaces}{p}")
         return vp
 
+    #def format_levelfs_column(values: List[str]) -> List[str]:
+
+
 
     def depts_with_shares(self,
                           node_id: str,
                           sort_by: str="LevelFS",
                           decimals: int=0,
-                          tabbing: int=0) -> str:
+                          tabbing: int=0,
+                          user_dept: str="") -> str:
         """List the data of the children of the specified parent. This can be
            used to show which high-level associations have contributed."""
+        user_level = True if self.tree.children(node_id)[0].is_leaf() else False
         rows = []
         for child in self.tree.children(node_id):
             minfs = "--"
             maxfs = "--"
-            if node_id == "total (--)":
+            if node_id == "total (--)" or not user_level:
                 if not child.is_leaf():
                     nodes = self.tree.leaves(child.identifier)
                     minfs = min([float(node.data.fair_share) for node in nodes if "(--)" not in node.identifier])
                     maxfs = max([float(node.data.fair_share) for node in nodes if "(--)" not in node.identifier])
             minfs = minfs if minfs == "--" else str(round(minfs, 5))
             maxfs = maxfs if maxfs == "--" else str(round(maxfs, 5))
-            if len(minfs) == 6:
-                minfs += "0"
-            if len(maxfs) == 6:
-                maxfs += "0"
+            if minfs != "--" and len(minfs) <= 6:
+                minfs += "0" * (7 - len(minfs))
+            if maxfs != "--" and len(maxfs) <= 6:
+                maxfs += "0" * (7 - len(maxfs))
             rows.append([child.data.account,
                          child.data.user,
                          int(child.data.raw_shares),
                          child.data.raw_usage,
                          child.data.fair_share,
                          float(child.data.level_fs),
-                         len(self.tree.leaves(child.identifier)),
+                         len([leaf for leaf in self.tree.leaves(child.identifier) if "(--)" not in leaf.identifier]),
                          minfs,
                          maxfs])
-        user_level = True if self.tree.children(node_id)[0].is_leaf() else False
         if sort_by == "LevelFS":
             rows.sort(key=lambda x: x[5], reverse=True)
         else:
@@ -325,7 +265,7 @@ class ShareTree:
             shares.append(str(sh))
             usage.append(us)
             fair.append(fr)
-            lfs.append("Infinity" if lf == float('inf') else self.format_levelfs(str(lf)))
+            lfs.append(self.format_levelfs(lf))
             users.append(ct)
             minfs.append(mn)
             maxfs.append(mx)
@@ -342,28 +282,33 @@ class ShareTree:
         width_maxfs = max(len("max(FairShare)"), max(map(len, maxfs)))
         sp = " " * 3
         tb = " " * 5 * tabbing
+        term = Terminal()
+        #print(self.tree.level(node_id), self.tree[node_id].data.account)
         if user_level:
-            rows = f"{tb}{'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage  ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
-            rows += f"{tb}{' ' * width_idx}  {'-' * (width_user + width_shares + width_usage + width_lfs + width_fair + 4 * len(sp))}\n"
-            for i, (ur, sh, us, lf, fr) in enumerate(zip(user, shares, usage, lfs, fair)):
-                rows += f"{tb}{i+1:>{width_idx}}  {ur:>{width_user}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{fr:>{width_fair}}\n"
+            rows = f"{tb}| {'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Usage  ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
+            rows += f"{tb}| {' ' * width_idx}  {'-' * (width_user + width_usage + width_lfs + width_fair + 3 * len(sp))}\n"
+            for i, (ur, us, lf, fr) in enumerate(zip(user, usage, lfs, fair)):
+                rows += f"{tb}| {i+1:>{width_idx}}  {ur:>{width_user}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{fr:>{width_fair}}\n"
         else:
-            rows = f"{tb}{'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage  ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'NumUsers ':>{width_users}}{sp}{'min(FairShare)':>{width_minfs}}{sp}{'max(FairShare)':>{width_maxfs}}\n"
-            rows += f"{tb}{' ' * width_idx}  {'-' * (width_account + width_shares + width_usage + width_lfs + width_users + width_minfs + width_maxfs + 6 * len(sp))}\n"
+            rows = f"{tb}| {'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage  ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'NumUsers ':>{width_users}}{sp}{'min(FairShare)':>{width_minfs}}{sp}{'max(FairShare)':>{width_maxfs}}\n"
+            rows += f"{tb}| {' ' * width_idx}  {'-' * (width_account + width_shares + width_usage + width_lfs + width_users + width_minfs + width_maxfs + 6 * len(sp))}\n"
             for i, (ac, sh, us, lf, ct, mn, mx) in enumerate(zip(account, shares, usage, lfs, users, minfs, maxfs)):
-                rows += f"{tb}{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}{sp}{mn:>{width_minfs}}{sp}{mx:>{width_maxfs}}\n"
+                if node_id == "total (--)" and ac == user_dept:
+                    rows += f"{tb}| {term.bold}{term.blue}{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}{sp}{mn:>{width_minfs}}{sp}{mx:>{width_maxfs}}{term.normal}\n"
+                else:
+                    rows += f"{tb}| {i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}{sp}{mn:>{width_minfs}}{sp}{mx:>{width_maxfs}}\n"
         return rows
 
 
     def fairshare_rank(self, fs: float) -> Tuple[str, str, str]:
         """Estimate the rank of the user. One could determine it exactly but
            not so important."""
-        total_users = len(self.tree.leaves())
+        total_users = len([leaf for leaf in self.tree.leaves() if "(--)" not in leaf.identifier])
         rank = int(total_users * (1 - fs))
         rank = max(1, rank)
         pct = round(100 * (1 - rank / total_users))
         direction = "top" if pct >= 50 else "bottom"
-        return (f"{rank} of {total_users}", f"{pct}%", direction)
+        return (f"{rank} of {total_users}", f"{pct}", direction)
 
 
     def is_pli(self, node_id: str) -> bool:
@@ -391,11 +336,12 @@ class ShareTree:
         return "PLI: 300"
 
 
-    def get_total_shares(self) -> int:
-        """Get level 2 shares ignoring PLI."""
+    def get_total_shares(self, node_id: str = "total (--)") -> int:
+        """Return the total shares of the children of the specified parent node."""
         total = 0
-        for child in self.tree.children("total (--)"):
-            total += int(child.data.raw_shares)
+        for child in self.tree.children(node_id):
+            if child.data.raw_shares.isdigit():
+                total += int(child.data.raw_shares)
         return total
 
 
@@ -416,20 +362,30 @@ class ShareTree:
             if i == 0:
                 return f"{j + 1}/{len(pairs)}"
 
+
     @staticmethod
-    def format_levelfs(lfs: str) -> str:
-        """Format the LevelFS for concise display."""
-        if lfs == "inf":
-            return "Infinity"
-        lfs = float(lfs)
-        if lfs < 0.1 and lfs >= 0.01:
+    def format_levelfs(lfs: float) -> str:
+        """Format a LevelFS value for display."""
+        if lfs == float("inf"):
+            return "infinity"
+        if lfs == 0.0:
+            return "0"
+        if lfs < 0.00001:
+            return f"{lfs:.2e}"
+        elif lfs < 0.0001:
+            return str(round(lfs, 5))
+        elif lfs < 0.001:
+            return str(round(lfs, 4))
+        elif lfs < 0.01:
+            return str(round(lfs, 3))
+        elif lfs < 0.1:
             return str(round(lfs, 2))
-        elif lfs < 1 and lfs >= 0.1:
+        elif lfs < 1:
             return str(round(lfs, 1))
-        elif lfs < 10000 and lfs >= 1:
+        elif lfs <= 99999999:
             return str(round(lfs))
         else:
-            return str(lfs)
+            return f"{lfs:.2e}"
 
 
     def draw_subtree(self, node_id: str, netid: str) -> None:
@@ -445,14 +401,16 @@ class ShareTree:
         total_shares = self.get_total_shares()
         for i, p in enumerate(path_names[1:]):
             rank = self.get_levelfs_rank(p)
-            level = self.format_levelfs(self.tree[p].data.level_fs)
+            level = self.format_levelfs(float(self.tree[p].data.level_fs))
             shares = self.tree[p].data.raw_shares
             if p == "total (--)":
                 tree.create_node(tag=f"{p.split()[0]}", identifier=p, parent=parent)
             elif i + 1 == len(path_names[1:]):
-                tree.create_node(tag=f"{user} (LevelFS Rank: {rank})", identifier=p, parent=parent)
-            else:
+                tree.create_node(tag=f"{user} (LevelFS: {level}, LevelFS Rank: {rank})", identifier=p, parent=parent)
+            elif i == 1:
                 tree.create_node(tag=f"{p.split()[0]} (LevelFS: {level}, LevelFS Rank: {rank}, Shares: {shares}/{total_shares})", identifier=p, parent=parent)
+            else:
+                tree.create_node(tag=f"{p.split()[0]} (LevelFS: {level}, LevelFS Rank: {rank})", identifier=p, parent=parent)
             parent = p
         tree.show()
 
@@ -473,93 +431,38 @@ class ShareTree:
         return f"{txt}{term.normal}"
 
 
+    @staticmethod
+    def format_fairshare(fs: float) -> str:
+        """Format and colorize the fairshare value."""
+        fs_str = f"Fairshare: {fs}"
+        padding = " " * ((WIDTH - len(fs_str)) // 2)
+        # set default color
+        if fs >= 0.75:
+            color = "green"
+        elif fs <= 0.25:
+            color = "red"
+        else:
+            color = "black"
+        fs_color = ShareTree.colorize(fs, style="bold", color=color)
+        label = ShareTree.colorize("Fairshare:", style="bold", color="black")
+        return f"{padding}{label} {fs_color}"
+
+
     def explain(self, fs: float) -> str:
         """Return an explain of the fairshare of the user and what they can
            expect for queue times."""
         rank, pct, direction = self.fairshare_rank(fs)
         wrapper = TextWrapper(width=WIDTH)
         if fs >= 0.75:
-            msg = (f"Good news! Your fairshare value of {fs} is {rank}. This means that "
-                  "you can expect short queue times.")
-        elif fs >= 0.5 and fs < 0.75:
-            msg = (f"You have a decent fairshare value of {fs} and {rank}. You can expect "
-                   "intermediate queue times.")
-        elif fs >= 0.0 and fs < 0.5:
-            msg = ("Fairshare varies between 0 to 1. The larger the value the larger the contribution "
-                   f"to job priority. Bad news! You have a low fairshare value of {fs}. Your fairshare "
+            msg = (f"Good news! You have a high fairshare value of {fs}. Your fairshare "
+                   f"rank is {rank} users which puts you in the {direction} {pct} percentile. "
+                  "You should expect short queue times for small to intermediate size jobs.")
+        elif fs >= 0.25 and fs < 0.75:
+            msg = (f"You have a fairshare value of {fs}. Your fairshare rank is {rank} users which puts you in the {direction} {pct} percentile. "
+                   "You can expect intermediate queue times.")
+        elif fs >= 0.0 and fs < 0.25:
+            msg = (f"Bad news! You have a low fairshare value of {fs}. Your fairshare "
                    f"rank is {rank} users which puts you in the {direction} {pct} percentile. You can expect "
-                   "long queue times.\n\nThe tree at the top helps explain why your fairshare is low.")
+                   "long queue times. The tree at the top helps explain why your fairshare is low.")
+        # Fairshare varies between 0 to 1. The larger the value the larger the contribution to job priority
         return wrapper.fill(msg)
-
-
-if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser(description="myshare - Shares of a user in plain language")
-    parser.add_argument("-u", "--user", type=str, default=os.environ["USER"], help="NetID of the user")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show more details")
-    parser.add_argument("-d", "--debug", action="store_true", help="Print debug info")
-    args = parser.parse_args()
-
-    mytree = ShareTree()
-    mytree.get_raw_data()
-    mytree.parse(args.user)
-    if args.debug:
-        print(mytree.analyze())
-    if mytree.num_accounts == 0:
-        print(f"{args.user} not found in the sshare tree.")
-
-    for node_id in mytree.tree.expand_tree():
-        if node_id.endswith(f" ({args.user})"):
-            print("-" * WIDTH)
-            print("stree".center(WIDTH))
-            print("-" * WIDTH)
-            mytree.draw_subtree(node_id, args.user)
-            fs = float(mytree.tree[node_id].data.fair_share)
-            fs_color = mytree.colorize(fs, style="bold", color="green")
-            label = mytree.colorize("Fairshare:", style="bold", color="black")
-            print(f"{label} {fs_color}".center(WIDTH))
-            print("")
-            print(mytree.explain(fs))
-            print(f"Department shares: {mytree.get_dept(node_id)}\n")
-            j = SingleJobBreakdown(args.user, fs)
-            j.get_job_data()
-            j.parse()
-            if j.num_jobs > 1:
-                j.explain()
-            if args.verbose:
-                path = list(mytree.tree.rsearch(node_id))
-                path.reverse()
-                for i, node_id in enumerate(path):
-                    if node_id == "root (--)" or mytree.tree[node_id].is_leaf():
-                        continue
-                    print(" " * 5 * (i - 1) , node_id.split()[0], "at level", mytree.tree.level(node_id))
-                    print(mytree.depts_with_shares(node_id=node_id, decimals=1, tabbing=i-1))
-
-                #print("\n\nBy Research Group\n\n")
-                #level3 = mytree.tree.parent(node_id).identifier
-                #level3 = mytree.tree.ancestor(node_id, level=2).identifier
-                #print(mytree.depts_with_shares(node_id=level3, decimals=1))
-                #print("\n\nHere are the departments sorted by contributions or shares:\n\n")
-                #print(mytree.depts_with_shares(node_id="total (--)", decimals=1))
-                s = ("Accounts with LevelFS > 1 have been under-served by Slurm. User within "
-                     "those accounts will receive a priority boost. Similarly, accounts with "
-                     "LevelFS < 1 will receive a priority penalty since they have been over-served. "
-                     "When all accounts are running heavily the the shares breakdown  will "
-                     "reflect where the resources are allocated. The shares column"
-                     "reflects the limiting distribution or what to expect over long times. "
-                     "The good news for users in a department with 1 or a small number of "
-                     "shares is that the contributing departments often run fewer jobs "
-                     "for periods of time. Then the effective shares increases for everyone else.\n")
-                print(s)
-                print("Your fairshare is approximately equal to 1 - levelFS rank@dept / num_depts\n")
-                print("More important than shares is your LevelFS Rank at level 2\n")
-                #print(mytree.research_group_table(node_id, args.user))
-            if mytree.num_accounts > 1:
-                print("\n\n==============================================================================\n\n")
-
-    print("\n")
-    print("-" * 80)
-    print("For more details about your cluster share, run the following command:")
-    print("    $ stree --verbose")
-    print("\nFor more information about job priority, making a financial contribution\nto the cluster, additional GPUs at Princeton:")
-    print(f"    {c.MORE_INFO_URL}")
