@@ -46,7 +46,7 @@ if __name__ == "__main__":
     for node_id in mytree.tree.expand_tree():
         if node_id.endswith(f" ({args.user})"):
             print("-" * WIDTH)
-            print("stree".center(WIDTH))
+            print("Why aren't my jobs running?".center(WIDTH))
             print("-" * WIDTH)
             mytree.draw_subtree(node_id, args.user)
             fs = float(mytree.tree[node_id].data.fair_share)

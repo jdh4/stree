@@ -1,3 +1,7 @@
+"""Assume 'sponsor (user)' is unique over the tree. Will get conflicts otherwise.
+   Same is true with 'association (--)'. Could use uid to resolve the first issue."""
+
+
 import subprocess
 from textwrap import TextWrapper
 from treelib import Tree
@@ -151,65 +155,19 @@ class ShareTree:
         return s
 
 
-    def display_siblings(self, node_id: str) -> str:
-        """Print the siblings for the given node identifier. This ignores the
-           specified node in the output."""
-        # compute proportion of rawusage
-        return "\n".join([str(s.data) for s in self.tree.siblings(node_id)])
-
-
-    def research_group_table(self, node_id: str, netid: str) -> str:
-        """Return a string of the rows of the research group table sorted by
-           RawUsage."""
-        members = [[self.tree[node_id].data.user,
-                   int(self.tree[node_id].data.raw_usage),
-                   float(self.tree[node_id].data.fair_share),
-                   self.tree[node_id].data.level_fs]]
-        for sibling in self.tree.siblings(node_id):
-            members.append([sibling.data.user,
-                            int(sibling.data.raw_usage),
-                            float(sibling.data.fair_share),
-                            sibling.data.level_fs])
-        members.sort(key=lambda x: x[1], reverse=True)
-        w_idx = 4
-        w_name = 10
-        w_dept = 14
-        w_sal = 14
-        #TODO add proportions
-        s = f"{'':>{w_idx}} {'User':>{w_name}} {'RawUsage':>{w_dept}} {'Fairshare':>{w_sal}} {'LevelFS':>{w_sal}}\n"
-        for i, member in enumerate(members):
-            idx, user, usage, fs, lfs = i + 1, member[0], member[1], member[2], member[3]
-            if user == netid:
-               idx = self.colorize(idx, color="red")
-               user = self.colorize(user, color="red")
-               usage = self.colorize(usage, color="red")
-            s += f"{idx:>{w_idx}} {user:>{w_name}} {usage:>{w_dept}} {fs:>{w_sal},.5f} {lfs:>{w_sal}}\n"
-        return s
-
-
     @staticmethod
-    def add_proportions(values: List[str], decimals: int=0) -> List[str]:
+    def add_proportions(values: List[str], decimals: int = 0) -> List[str]:
         """Add the proportion of each value in parentheses."""
         if values == []:
             return []
-        values = list(map(int, values))
-        total = sum(values)
+        int_values = [int(v) for v in values]
+        total = sum(int_values)
         if total == 0:
-            proportions = ["(--)"] * len(values)
+            proportions = ["(--)"] * len(int_values)
         else:
-            if decimals == 0:
-                proportions = [f"({round(100 * value / total)}%)" for value in values]
-            else:
-                proportions = [f"({round(100 * value / total, decimals)}%)" for value in values]
-        width_pro = max(map(len, proportions))
-        vp = []
-        for v, p in zip(values, proportions):
-            spaces = " " * (width_pro - len(p) + 1)
-            vp.append(f"{str(v)}{spaces}{p}")
-        return vp
-
-    #def format_levelfs_column(values: List[str]) -> List[str]:
-
+            proportions = [f"({v / total:.{decimals}%})" for v in int_values]
+        width_pro = max(len(p) for p in proportions)
+        return [f"{v} {p:>{width_pro}}" for v, p in zip(int_values, proportions)]
 
 
     def depts_with_shares(self,
@@ -236,13 +194,17 @@ class ShareTree:
                 minfs += "0" * (7 - len(minfs))
             if maxfs != "--" and len(maxfs) <= 6:
                 maxfs += "0" * (7 - len(maxfs))
+            num_active_users = 0
+            for leaf in self.tree.leaves(child.identifier):
+                if "(--)" not in leaf.identifier and int(leaf.data.raw_usage) > 0:
+                    num_active_users += 1
             rows.append([child.data.account,
                          child.data.user,
                          int(child.data.raw_shares),
                          child.data.raw_usage,
                          child.data.fair_share,
                          float(child.data.level_fs),
-                         len([leaf for leaf in self.tree.leaves(child.identifier) if "(--)" not in leaf.identifier]),
+                         num_active_users,
                          minfs,
                          maxfs])
         if sort_by == "LevelFS":
@@ -277,7 +239,7 @@ class ShareTree:
         width_usage = max(len("RawUsage"), max(map(len, usage)))
         width_fair = max(len("FairShare"), max(map(len, fair)))
         width_lfs = max(len("LevelFS"), max(map(len, lfs)))
-        width_users = max(len("NumUsers"), max(map(len, map(str, users))))
+        width_users = max(len("NumActiveUsers"), max(map(len, map(str, users))))
         width_minfs = max(len("min(FairShare)"), max(map(len, minfs)))
         width_maxfs = max(len("max(FairShare)"), max(map(len, maxfs)))
         sp = " " * 3
@@ -290,7 +252,7 @@ class ShareTree:
             for i, (ur, us, lf, fr) in enumerate(zip(user, usage, lfs, fair)):
                 rows += f"{tb}| {i+1:>{width_idx}}  {ur:>{width_user}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{fr:>{width_fair}}\n"
         else:
-            rows = f"{tb}| {'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage  ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'NumUsers ':>{width_users}}{sp}{'min(FairShare)':>{width_minfs}}{sp}{'max(FairShare)':>{width_maxfs}}\n"
+            rows = f"{tb}| {'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage  ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'NumActiveUsers ':>{width_users}}{sp}{'min(FairShare)':>{width_minfs}}{sp}{'max(FairShare)':>{width_maxfs}}\n"
             rows += f"{tb}| {' ' * width_idx}  {'-' * (width_account + width_shares + width_usage + width_lfs + width_users + width_minfs + width_maxfs + 6 * len(sp))}\n"
             for i, (ac, sh, us, lf, ct, mn, mx) in enumerate(zip(account, shares, usage, lfs, users, minfs, maxfs)):
                 if node_id == "total (--)" and ac == user_dept:
@@ -300,15 +262,39 @@ class ShareTree:
         return rows
 
 
+    @staticmethod
+    def format_percentile(n: int) -> str:
+        """Converts a percentile integer (0-100) to its ordinal string
+           representation."""
+        if not (0 <= n <= 100):
+            raise ValueError("Percentile must be between 0 and 100.")
+        if 11 <= n % 100 <= 13:
+            return f"{n}th"
+        last_digit = n % 10
+        if last_digit == 1:
+            return f"{n}st"
+        elif last_digit == 2:
+            return f"{n}nd"
+        elif last_digit == 3:
+            return f"{n}rd"
+        else:
+            return f"{n}th"
+
     def fairshare_rank(self, fs: float) -> Tuple[str, str, str]:
         """Estimate the rank of the user. One could determine it exactly but
-           not so important."""
-        total_users = len([leaf for leaf in self.tree.leaves() if "(--)" not in leaf.identifier])
-        rank = int(total_users * (1 - fs))
-        rank = max(1, rank)
-        pct = round(100 * (1 - rank / total_users))
+           not so important. Note that the total number of users is used
+           instead of the active number of users (where usage > 0)."""
+        # TODO: maybe this only applies under total (--) since root (root)
+        # it also includes pli but that is expected
+        total_users = sum(1 for leaf in self.tree.leaves() if "(--)" not in leaf.identifier)
+        if total_users == 0:
+            return ("0 of 0", "0", "bottom")
+        raw_rank = round(total_users * (1 - fs))
+        rank = max(1, min(total_users, raw_rank))
+        pct = 100 if rank == 1 else round(100 * (1 - rank / total_users))
         direction = "top" if pct >= 50 else "bottom"
-        return (f"{rank} of {total_users}", f"{pct}", direction)
+        pct_fmt = ShareTree.format_percentile(pct)
+        return (f"{rank} of {total_users}", pct_fmt, direction)
 
 
     def is_pli(self, node_id: str) -> bool:
@@ -326,6 +312,16 @@ class ShareTree:
         return round(pct)
 
 
+    def get_total_shares(self, node_id: str = "total (--)") -> int:
+        """Return the total shares of the children of the specified parent node.
+           Shares that are non-integers are skipped."""
+        total = 0
+        for child in self.tree.children(node_id):
+            if child.data.raw_shares.isdigit():
+                total += int(child.data.raw_shares)
+        return total
+
+
     def get_dept(self, node_id: str) -> str:
         """Return information about the department of the user."""
         if not self.is_pli(node_id):
@@ -336,31 +332,22 @@ class ShareTree:
         return "PLI: 300"
 
 
-    def get_total_shares(self, node_id: str = "total (--)") -> int:
-        """Return the total shares of the children of the specified parent node."""
-        total = 0
-        for child in self.tree.children(node_id):
-            if child.data.raw_shares.isdigit():
-                total += int(child.data.raw_shares)
-        return total
-
-
     def get_levelfs_rank(self, node_id: str) -> str:
         """Return the rank of the LevelFS values at the level of the specified
            node."""
-        levelfs = [self.tree[node_id].data.level_fs]
-        for sibling in self.tree.siblings(node_id):
-            levelfs.append(sibling.data.level_fs)
-        if levelfs[0] == ["inf"]:
-            return "1 of {len(levelfs)}"
-        pairs = []
-        for i, lf in enumerate(levelfs):
-            lf = float('inf') if lf == "inf" else float(lf)
-            pairs.append((i, lf))
-        pairs.sort(key=lambda x: x[1], reverse=True)
-        for j, (i, lf) in enumerate(pairs):
-            if i == 0:
-                return f"{j + 1}/{len(pairs)}"
+        target_fs_raw = self.tree[node_id].data.level_fs
+        siblings = self.tree.siblings(node_id)
+        total_nodes = 1 + len(siblings)
+        if target_fs_raw == "inf":
+            return f"1/{total_nodes}"
+        target_val = float(target_fs_raw)
+        rank = 1
+        for sibling in siblings:
+            sib_fs_raw = sibling.data.level_fs
+            sib_val = float('inf') if sib_fs_raw == "inf" else float(sib_fs_raw)
+            if sib_val > target_val:
+                rank += 1
+        return f"{rank}/{total_nodes}"
 
 
     @staticmethod
