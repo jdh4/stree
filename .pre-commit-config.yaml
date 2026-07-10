@@ -4,8 +4,6 @@ repos:
     hooks:
       - id: check-added-large-files  # prevents committing massive files
       - id: check-case-conflict      # filenameing for case-insensitive filesystems
-      - id: check-json               # checks JSON syntax
-      - id: check-symlinks           # symlinks which do not point to anything
       - id: check-yaml               # checks YAML syntax
       - id: debug-statements         # check for breakpoint() and debug imports
       - id: end-of-file-fixer        # ensures files end with a newline

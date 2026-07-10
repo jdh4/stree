@@ -11,10 +11,12 @@
 
 
 import os
+import sys
 import argparse
 from textwrap import TextWrapper
 import config as c
 from sharetree import ShareTree
+from sharetree import ShareTreeError
 from single_job import SingleJobBreakdown
 try:
     from blessed import Terminal
@@ -37,7 +39,12 @@ if __name__ == "__main__":
     term = Terminal()
     mytree = ShareTree()
     mytree.get_raw_data()
-    mytree.parse(args.user)
+    try:
+        mytree.parse(args.user)
+    except ShareTreeError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+
     if args.debug:
         print(mytree.analyze())
     if mytree.num_accounts == 0:
@@ -54,6 +61,8 @@ if __name__ == "__main__":
             print("")
             print(mytree.explain(fs))
             print(f"Department shares: {mytree.get_dept(node_id)}\n")
+            print("")
+            print(mytree.depts_with_shares(node_id="total (--)", decimals=1, sort_by="RawShares", tabbing=-1))
             if args.verbose:
                 path = list(mytree.tree.rsearch(node_id))
                 path.reverse()

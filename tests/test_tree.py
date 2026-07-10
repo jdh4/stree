@@ -1,5 +1,6 @@
 import pytest
 from sharetree import ShareTree
+from treelib.exceptions import DuplicatedNodeIdError
 
 
 @pytest.fixture
@@ -33,7 +34,30 @@ def medium_tree():
               "    kent u3 1 2.0 3 4.0 5.0 0.6\n"
               "    kent u4 1 2.0 3 4.0 5.0 inf\n"
               " pli 1 2.0 3 4.0 5.0\n"
-              "  pli jdh4 1 2.0 3 4.0 5.0 6.0\n")
+              "  pli u1 1 2.0 3 4.0 5.0 6.0\n")
+    return sshare
+
+
+@pytest.fixture
+def deep_tree():
+    sshare = ("root 1.0 2 3.0\n"
+              " root root 1 2.0 3 4.0 5.0 6.0\n"
+              " total 1 2.0 3 4.0 5.0\n"
+              "  chem 1 2.0 3 4.0 0.5\n"
+              "   rcar 1 2.0 3 4.0 0.5\n"
+              "    soos 1 2.0 3 4.0 5.0\n"
+              "     benz 1 2.0 3 4.0 5.0\n"
+              "      benz u1 1 2.0 3 4.0 5.0 6.0\n"
+              "      benz u2 1 2.0 3 4.0 5.0 6.0\n"
+              "  orfe 1 2.0 3 4.0 5.0\n"
+              "   kent 1 2.0 3 4.0 5.0\n"
+              "    kent u1 1 2.0 3 4.0 5.0 6.0\n"
+              " cft 1 2.0 3 4.0 5.0\n"
+              " pli 1 2.0 3 4.0 5.0\n"
+              "  pli u1 1 2.0 3 4.0 5.0 6.0\n"
+              "  pli u2 1 2.0 3 4.0 5.0 6.0\n"
+              "  llm 1 2.0 3 4.0 5.0\n"
+              "   tom u1 1 2.0 3 4.0 5.0 inf\n")
     return sshare
 
 
@@ -41,7 +65,56 @@ def test_simple_example(small_tree):
     t = ShareTree()
     t.get_raw_data(text=small_tree)
     t.parse("aturing")
+    assert t.tree.size() == 7
+    assert t.tree.depth() == 2
     assert len(t.tree.leaves()) == 4
+    expected = ["chem (jdh4)", "orfe (jdh4)"]
+    assert [child.identifier for child in t.tree.children("total (--)")] == expected
+    assert t.tree.level("total (--)") == 1
+    assert t.tree["orfe (jdh4)"].data.level_fs == "6.0"
+
+
+def test_simple_example_med(medium_tree):
+    t = ShareTree()
+    t.get_raw_data(text=medium_tree)
+    t.parse("aturing")
+    assert t.tree.size() == 18
+    assert t.tree.depth() == 4
+    assert len(t.tree.leaves()) == 10
+    expected = ["chem (--)", "orfe (--)"]
+    assert [child.identifier for child in t.tree.children("total (--)")] == expected
+    expected = ["soos (u1)", "soos (u2)"]
+    assert [child.identifier for child in t.tree.children("soos (--)")] == expected
+    assert t.tree["pli (u1)"].data.fair_share == "5.0"
+    expected = ["kent (u4)", "kent (--)", "orfe (--)", "total (--)", "root (--)"]
+    assert list(t.tree.rsearch("kent (u4)")) == expected
+    assert t.tree["kent (u3)"].data.raw_usage == "3"
+
+
+def test_simple_example_deep(deep_tree):
+    t = ShareTree()
+    t.get_raw_data(text=deep_tree)
+    t.parse("aturing")
+    assert t.tree.size() == 18
+    assert t.tree.depth() == 6
+    assert len(t.tree.leaves()) == 8
+    expected = ["chem (--)", "orfe (--)"]
+    assert [child.identifier for child in t.tree.children("total (--)")] == expected
+    expected = ["benz (u1)", "benz (u2)"]
+    assert [child.identifier for child in t.tree.children("benz (--)")] == expected
+    expected = ["benz (u2)", "benz (--)", "soos (--)", "rcar (--)", "chem (--)", "total (--)", "root (--)"]
+    assert list(t.tree.rsearch("benz (u2)")) == expected
+    assert t.tree["tom (u1)"].data.level_fs == "inf"
+
+
+def test_duplication_association():
+    with pytest.raises(DuplicatedNodeIdError):
+        t = ShareTree()
+        sshare = ("root 1.0 2 3.0\n"
+                  " root root 1 2.0 3 4.0 5.0 6.0\n"
+                  " root root 1 2.0 3 4.0 5.0 6.0\n")
+        t.get_raw_data(text=sshare)
+        t.parse("aturing")
 
 
 def test_parse_count():
@@ -71,7 +144,7 @@ def test_get_levelfs_rank():
     assert t.get_levelfs_rank("lsi (--)") == "4/4"
     assert t.get_levelfs_rank("mae (--)") == "1/4"
     assert t.get_levelfs_rank("pni (--)") == "1/4"
-    """Test for one association."""
+    # test for one association
     t = ShareTree()
     sshare = ("root 1 2 3\n"
               " cbe 1 2 3 4 55.0\n"

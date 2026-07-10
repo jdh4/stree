@@ -5,6 +5,7 @@
 import subprocess
 from textwrap import TextWrapper
 from treelib import Tree
+from treelib.exceptions import DuplicatedNodeIdError
 from typing import Optional
 from typing import Union
 from typing import List
@@ -30,8 +31,7 @@ class TreeNode:
                  raw_usage,
                  effectv_usage,
                  fair_share,
-                 level_fs,
-                 level):
+                 level_fs):
         self.account = account
         self.user = user
         self.raw_shares = raw_shares
@@ -40,11 +40,14 @@ class TreeNode:
         self.effectv_usage = effectv_usage
         self.fair_share = fair_share
         self.level_fs = level_fs
-        self.level = level
 
     def __str__(self):
         return (f"level: {self.level}, account: {self.account}, user: {self.user}, raw shares: {self.raw_shares}, "
-                f"effective usage: {self.effectv_usage}, fs: {self.fair_share}, lfs: {self.level_fs}")
+                f"effective usage: {self.effectv_usage}, fs: {self.fair_share}")
+
+
+class ShareTreeError(Exception):
+    pass
 
 
 class ShareTree:
@@ -77,58 +80,16 @@ class ShareTree:
 
     def parse(self, netid: str) -> None:
         """Build the tree by parsing the sshare output line by line."""
-        #TODO remove level in node
+        parent_at_level = {-1: "root (--)"}
         current_parent = "root (--)"
-        prev_parent_level_1 = None
-        prev_parent_level_2 = None
-        prev_parent_level_3 = None
-        prev_parent_level_4 = None
         for line in self.lines:
-            items = line.split()
+            if not line.strip():
+                continue
             level = len(line) - len(line.lstrip())
-            items.append(level)
-            if len(items) == 9:
-                # user level
-                account = items[0]
-                user = items[1]
-                self.tree.create_node(tag=account,
-                                      identifier=f"{account} ({user})",
-                                      parent=current_parent,
-                                      data=TreeNode(*items))
-                if netid == user:
-                    self.num_accounts += 1
-            elif len(items) == 7:
-                # non-user association
-                items.insert(1, "--")
-                items.insert(6, "--")
-                account = items[0]
-                user = items[1]
-                if level == 1:
-                    current_parent = "root (--)"
-                elif level == 2 and prev_parent_level_1:
-                    current_parent = prev_parent_level_1
-                elif level == 3 and prev_parent_level_2:
-                    current_parent = prev_parent_level_2
-                elif level == 4 and prev_parent_level_3:
-                    current_parent = prev_parent_level_3
-                elif level == 5 and prev_parent_level_4:
-                    current_parent = prev_parent_level_4
-                self.tree.create_node(tag=account,
-                                      identifier=f"{account} ({user})",
-                                      parent=current_parent,
-                                      data=TreeNode(*items))
-                if level == 1:
-                   prev_parent_level_1 = f"{account} ({user})"
-                elif level == 2:
-                   prev_parent_level_2 = f"{account} ({user})"
-                elif level == 3:
-                   prev_parent_level_3 = f"{account} ({user})"
-                elif level == 4:
-                   prev_parent_level_4 = f"{account} ({user})"
-                current_parent = f"{account} ({user})"
+            items = line.split()
 
-            elif len(items) == 5:
-                # root node
+            # root node
+            if len(items) == 4:
                 items.insert(1, "--")
                 items.insert(2, "--")
                 items.insert(6, "--")
@@ -136,9 +97,42 @@ class ShareTree:
                 self.tree.create_node(tag="ROOT",
                                       identifier="root (--)",
                                       data=TreeNode(*items))
-                current_parent = "root (--)"
+                parent_at_level[level] = "root (--)"
+                continue
+
+            account = items[0]
+            user = items[1]
+            identifier = f"{account} ({user})"
+
+            parent_level = max([lvl for lvl in parent_at_level.keys() if lvl < level], default=-1)
+            current_parent = parent_at_level[parent_level]
+
+            if len(items) == 8:
+                # user level
+                self.tree.create_node(tag=account,
+                                      identifier=identifier,
+                                      parent=current_parent,
+                                      data=TreeNode(*items))
+                if netid == user:
+                    self.num_accounts += 1
+            elif len(items) == 6:
+                # non-user association
+                items.insert(1, "--")
+                items.insert(6, "--")
+                identifier = f"{account} ({items[1]})"
+                try:
+                    self.tree.create_node(tag=account,
+                                          identifier=identifier,
+                                          parent=current_parent,
+                                          data=TreeNode(*items))
+                except DuplicatedNodeIdError as e:
+                    msg = f"Node '{identifier}' already exists (Details: {e})."
+                    raise ShareTreeError(msg) from e
+                else:
+                    parent_at_level[level] = identifier
             else:
-                raise ValueError(f"ERROR: row found with {len(items)} items ({line})")
+                msg = f"ERROR: row found with {len(items)} items ({line})"
+                raise ValueError(msg)
 
 
     def analyze(self) -> str:
@@ -209,6 +203,8 @@ class ShareTree:
                          maxfs])
         if sort_by == "LevelFS":
             rows.sort(key=lambda x: x[5], reverse=True)
+        elif sort_by == "RawShares":
+            rows.sort(key=lambda x: x[2], reverse=True)
         else:
             rows.sort(key=lambda x: x[2], reverse=True)
         account = []
@@ -246,6 +242,12 @@ class ShareTree:
         tb = " " * 5 * tabbing
         term = Terminal()
         #print(self.tree.level(node_id), self.tree[node_id].data.account)
+        if tabbing == -1:
+            rows = f"{'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage  ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'NumActiveUsers ':>{width_users}}\n"
+            rows += f"{' ' * width_idx}  {'-' * (width_account + width_shares + width_usage + width_lfs + width_users + 4 * len(sp))}\n"
+            for i, (ac, sh, us, lf, ct, mn, mx) in enumerate(zip(account, shares, usage, lfs, users, minfs, maxfs)):
+                rows += f"{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}\n"
+            return rows
         if user_level:
             rows = f"{tb}| {'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Usage  ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
             rows += f"{tb}| {' ' * width_idx}  {'-' * (width_user + width_usage + width_lfs + width_fair + 3 * len(sp))}\n"
@@ -279,6 +281,7 @@ class ShareTree:
             return f"{n}rd"
         else:
             return f"{n}th"
+
 
     def fairshare_rank(self, fs: float) -> Tuple[str, str, str]:
         """Estimate the rank of the user. One could determine it exactly but
