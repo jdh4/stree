@@ -25,14 +25,14 @@ class TreeNode:
 
     """Represents a single node (Account or User) in the sshare hierarchy."""
     def __init__(self,
-                 account,
-                 user,
-                 raw_shares,
-                 norm_shares,
-                 raw_usage,
-                 effectv_usage,
-                 fair_share,
-                 level_fs):
+                 account: str,
+                 user: str,
+                 raw_shares: str,
+                 norm_shares: str,
+                 raw_usage: str,
+                 effectv_usage: str,
+                 fair_share: str,
+                 level_fs: str) -> None:
         self.account = account
         self.user = user
         self.raw_shares = raw_shares
@@ -42,8 +42,8 @@ class TreeNode:
         self.fair_share = fair_share
         self.level_fs = level_fs
 
-    def __str__(self):
-        return (f"level: {self.level}, account: {self.account}, user: {self.user}, raw shares: {self.raw_shares}, "
+    def __str__(self) -> str:
+        return (f"account: {self.account}, user: {self.user}, raw shares: {self.raw_shares}, "
                 f"effective usage: {self.effectv_usage}, fs: {self.fair_share}")
 
 
@@ -60,7 +60,7 @@ class ShareTree:
     def __init__(self) -> None:
         """Create a tree instance and initialize num_accounts which tracks the
            number of accounts for the user."""
-        self.lines = []
+        self.lines: List[str] = []
         self.tree = Tree()
         self.num_accounts = 0
 
@@ -174,7 +174,7 @@ class ShareTree:
            descendant nodes of the specified parent node."""
         num_active_users = 0
         for leaf in self.tree.leaves(node_id):
-            if "(--)" not in leaf.identifier and leaf.data.raw_usage.isdigit() and int(leaf.data.raw_usage) > 0:
+            if "(--)" not in leaf.identifier and int(leaf.data.raw_usage) > 0:
                 num_active_users += 1
         return num_active_users
 
@@ -208,7 +208,6 @@ class ShareTree:
         if self.tree[node_id].is_leaf():
             return f"No table since '{node_id}' is a leaf node."
 
-        user_level = True if self.tree.children(node_id)[0].is_leaf() else False
         rows = []
         if fields == ("Account", "User", "Shares", "Usage"):
             descendants = [leaf for leaf in self.tree.leaves(node_id) if "(--)" not in leaf.identifier]
@@ -217,7 +216,7 @@ class ShareTree:
         # not necessarily at child so name should change
         for child in descendants:
             num_active_users = self.number_of_active_users(child.identifier)
-            minfs, maxfs = self.min_max_fairshare(child)
+            min_fs, max_fs = self.min_max_fairshare(child)
             rows.append([child.data.account,
                          child.data.user,
                          int(child.data.raw_shares),
@@ -225,8 +224,8 @@ class ShareTree:
                          child.data.fair_share,
                          float(child.data.level_fs),
                          num_active_users,
-                         minfs,
-                         maxfs])
+                         min_fs,
+                         max_fs])
         if sort_by == "LevelFS":
             rows.sort(key=lambda x: x[5], reverse=True)
         elif sort_by == "RawShares":
@@ -258,6 +257,7 @@ class ShareTree:
         if len(set(shares)) > 1:
             shares = self.add_proportions(shares, decimals)
         usage = self.add_proportions(usage, decimals=0)
+        user_level = True if self.tree.children(node_id)[0].is_leaf() else False
         width_idx = len(str(len(user))) if user_level else len(str(len(account)))
         width_account = max(len("Account "), max(map(len, account)))
         width_user = max(len("User"), max(map(len, user)))
@@ -273,31 +273,32 @@ class ShareTree:
         term = Terminal()
         #print(self.tree.level(node_id), self.tree[node_id].data.account)
         if tabbing == -1:
-            rows = f"{'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'ActiveUsers ':>{width_users}}\n"
-            rows += f"{' ' * width_idx}  {'─' * (width_account + width_shares + width_usage + width_lfs + width_users + 4 * len(sp))}\n"
+            table = f"{'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'ActiveUsers ':>{width_users}}\n"
+            table += f"{' ' * width_idx}  {'─' * (width_account + width_shares + width_usage + width_lfs + width_users + 4 * len(sp))}\n"
             for i, (ac, sh, us, lf, ct, mn, mx) in enumerate(zip(account, shares, usage, lfs, users, minfs, maxfs)):
-                rows += f"{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}\n"
-            return rows
+                table += f"{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}\n"
+            return table
         if tabbing == -2:
-            rows = f"{'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'User ':>{width_user}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}\n"
-            rows += f"{' ' * width_idx}  {'─' * (width_account + width_user + width_shares + width_usage + width_lfs + 4 * len(sp))}\n"
+            table = f"{'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'User ':>{width_user}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}\n"
+            table += f"{' ' * width_idx}  {'─' * (width_account + width_user + width_shares + width_usage + width_lfs + 4 * len(sp))}\n"
             for i, (ac, ur, sh, us, lf, ct, mn, mx) in enumerate(zip(account, user, shares, usage, lfs, users, minfs, maxfs)):
-                rows += f"{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{ur:>{width_user}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}\n"
-            return rows
+                if "0 " not in us:
+                    table += f"{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{ur:>{width_user}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}\n"
+            return table
         if user_level:
-            rows = f"{tb}| {'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
-            rows += f"{tb}| {' ' * width_idx}  {'─' * (width_user + width_usage + width_lfs + width_fair + 3 * len(sp))}\n"
+            table = f"{tb}| {'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
+            table += f"{tb}| {' ' * width_idx}  {'─' * (width_user + width_usage + width_lfs + width_fair + 3 * len(sp))}\n"
             for i, (ur, us, lf, fr) in enumerate(zip(user, usage, lfs, fair)):
-                rows += f"{tb}| {i+1:>{width_idx}}  {ur:>{width_user}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{fr:>{width_fair}}\n"
+                table += f"{tb}| {i+1:>{width_idx}}  {ur:>{width_user}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{fr:>{width_fair}}\n"
         else:
-            rows = f"{tb}| {'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'ActiveUsers ':>{width_users}}{sp}{'min(FairShare)':>{width_minfs}}{sp}{'max(FairShare)':>{width_maxfs}}\n"
-            rows += f"{tb}| {' ' * width_idx}  {'─' * (width_account + width_shares + width_usage + width_lfs + width_users + width_minfs + width_maxfs + 6 * len(sp))}\n"
+            table = f"{tb}| {'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'ActiveUsers ':>{width_users}}{sp}{'min(FairShare)':>{width_minfs}}{sp}{'max(FairShare)':>{width_maxfs}}\n"
+            table += f"{tb}| {' ' * width_idx}  {'─' * (width_account + width_shares + width_usage + width_lfs + width_users + width_minfs + width_maxfs + 6 * len(sp))}\n"
             for i, (ac, sh, us, lf, ct, mn, mx) in enumerate(zip(account, shares, usage, lfs, users, minfs, maxfs)):
                 if node_id == "total (--)" and ac == user_dept:
-                    rows += f"{tb}| {term.bold}{term.blue}{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}{sp}{mn:>{width_minfs}}{sp}{mx:>{width_maxfs}}{term.normal}\n"
+                    table += f"{tb}| {term.bold}{term.blue}{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}{sp}{mn:>{width_minfs}}{sp}{mx:>{width_maxfs}}{term.normal}\n"
                 else:
-                    rows += f"{tb}| {i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}{sp}{mn:>{width_minfs}}{sp}{mx:>{width_maxfs}}\n"
-        return rows
+                    table += f"{tb}| {i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}{sp}{mn:>{width_minfs}}{sp}{mx:>{width_maxfs}}\n"
+        return table
 
 
     @staticmethod
@@ -361,6 +362,7 @@ class ShareTree:
         return total
 
 
+    # TODO hard-coded level
     def get_dept(self, node_id: str) -> str:
         """Return information about the department of the user."""
         if not self.is_pli(node_id):
@@ -445,7 +447,7 @@ class ShareTree:
     def colorize(txt: Union[str, int, float], style: str="normal", color: str="black") -> str:
         term = Terminal()
         if not blessed_is_available:
-            return txt
+            return str(txt)
         if not isinstance(txt, str):
             txt = str(txt)
         if color == "red":

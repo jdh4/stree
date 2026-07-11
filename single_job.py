@@ -1,4 +1,6 @@
 import subprocess
+from typing import List
+from typing import Dict
 
 
 class SingleJobBreakdown:
@@ -6,8 +8,8 @@ class SingleJobBreakdown:
     def __init__(self, user: str, fairshare: float) -> None:
         self.user = user
         self.fairshare = fairshare
-        self.lines = []
-        self.job_dict = dict()
+        self.lines: List[str] = []
+        self.job_dict: Dict[str, str] = dict()
 
 
     def get_job_data(self) -> None:

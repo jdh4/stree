@@ -254,7 +254,7 @@ def test_number_of_active_users():
               " total 1 2.0 3 4.0 5.0\n"
               "  chem u1 1 2.0 3 4.0 5.0 6.0\n"
               "  orfe u2 1 2.0 0 4.0 5.0 6.0\n"
-              "  shop u3 1 2.0 X 4.0 5.0 6.0\n"
+              "  shop u3 1 2.0 0 4.0 5.0 6.0\n"
               "  ai 1 2.0 3 4.0 5.0\n"
               " pli 1 2.0 3 4.0 5.0\n"
               "  pli u4 1 2.0 3 4.0 5.0 6.0\n"
