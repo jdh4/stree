@@ -48,10 +48,10 @@ def deep_tree():
               "    soos 1 2.0 3 4.0 5.0\n"
               "     benz 1 2.0 3 4.0 5.0\n"
               "      benz u1 1 2.0 3 4.0 5.0 6.0\n"
-              "      benz u2 1 2.0 3 4.0 5.0 6.0\n"
+              "      benz u2 1 2.0 3 4.0 0.5 6.0\n"
               "  orfe 1 2.0 3 4.0 5.0\n"
               "   kent 1 2.0 3 4.0 5.0\n"
-              "    kent u1 1 2.0 3 4.0 5.0 6.0\n"
+              "    kent u1 1 2.0 3 4.0 5.5 6.0\n"
               " cft 1 2.0 3 4.0 5.0\n"
               " pli 1 2.0 3 4.0 5.0\n"
               "  pli u1 1 2.0 3 4.0 5.0 6.0\n"
@@ -244,3 +244,40 @@ def test_fairshare_rank(medium_tree):
     assert t.fairshare_rank(0.5) == ("5 of 10", "50th", "top")
     assert t.fairshare_rank(0.25) == ("8 of 10", "20th", "bottom")
     assert t.fairshare_rank(0.0) == ("10 of 10", "0th", "bottom")
+
+
+def test_number_of_active_users():
+    # usage is numerical column 3
+    t = ShareTree()
+    sshare = ("root 1.0 2 3.0\n"
+              " root root 1 2.0 3 4.0 5.0 6.0\n"
+              " total 1 2.0 3 4.0 5.0\n"
+              "  chem u1 1 2.0 3 4.0 5.0 6.0\n"
+              "  orfe u2 1 2.0 0 4.0 5.0 6.0\n"
+              "  shop u3 1 2.0 X 4.0 5.0 6.0\n"
+              "  ai 1 2.0 3 4.0 5.0\n"
+              " pli 1 2.0 3 4.0 5.0\n"
+              "  pli u4 1 2.0 3 4.0 5.0 6.0\n"
+              "  llm 1 2.0 3 4.0 5.0\n"
+              "   rdr u5 1 2.0 3 4.0 5.0 6.0\n")
+    t.get_raw_data(text=sshare)
+    t.parse("aturing")
+    assert t.number_of_active_users("total (--)") == 1
+    assert t.number_of_active_users("ai (--)") == 0
+    assert t.number_of_active_users("pli (--)") == 2
+
+
+def test_min_max_fairshare(deep_tree):
+    t = ShareTree()
+    t.get_raw_data(text=deep_tree)
+    t.parse("aturing")
+    descendant_node = t.tree["benz (--)"]
+    assert t.min_max_fairshare(descendant_node) == ("0.500000", "5.000000")
+    descendant_node = t.tree["benz (u2)"]
+    assert t.min_max_fairshare(descendant_node) == ("--", "--")
+    descendant_node = t.tree["cft (--)"]
+    assert t.min_max_fairshare(descendant_node) == ("--", "--")
+    descendant_node = t.tree["total (--)"]
+    assert t.min_max_fairshare(descendant_node) == ("0.500000", "5.500000")
+    descendant_node = t.tree["llm (--)"]
+    assert t.min_max_fairshare(descendant_node) == ("5.000000", "5.000000")

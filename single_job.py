@@ -6,27 +6,37 @@ class SingleJobBreakdown:
     def __init__(self, user: str, fairshare: float) -> None:
         self.user = user
         self.fairshare = fairshare
-        self.num_jobs = 0
+        self.lines = []
         self.job_dict = dict()
 
+
     def get_job_data(self) -> None:
-        #fmt = "Account,User,RawShares,NormShares,RawUsage,EffectvUsage,FairShare,LevelFS"
+        #cmd = ["sprio", "-u", self.user, "-S", "\'Y\'"]
         cmd = f"sprio -u {self.user} -S 'Y'"
-        output = subprocess.run(cmd,
-                                stdout=subprocess.PIPE,
-                                encoding="utf8",
-                                check=True,
-                                text=True,
-                                shell=True,
-                                timeout=30)
+        print(cmd)
+        try:
+            output = subprocess.run(cmd,
+                                    stdout=subprocess.PIPE,
+                                    encoding="utf8",
+                                    check=True,
+                                    text=True,
+                                    shell=True,
+                                    timeout=30)
+            output.check_returncode()
+        except subprocess.CalledProcessError as error:
+            msg = f"Error running sprio.\n{error.stderr}"
+            raise RuntimeError(msg) from error
         self.lines = output.stdout.splitlines()
 
+
     def parse(self):
-        self.num_jobs = len(self.lines) - 1
-        if self.num_jobs > 0:
+        if len(self.lines) > 1:
+            print(self.lines[0])
+            print(self.lines[-1])
             heading = self.lines[0].split()
             job = self.lines[-1].split()
             self.job_dict = dict(zip(heading, job))
+
 
     def explain(self):
         # need to connect partition to the particular slurm account of the user (pli vs. other)
