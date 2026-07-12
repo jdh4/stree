@@ -13,7 +13,7 @@
 import os
 import sys
 import argparse
-from textwrap import TextWrapper
+import textwrap
 import config as c
 from sharetree import ShareTree
 from sharetree import ShareTreeError
@@ -56,16 +56,47 @@ if __name__ == "__main__":
     print("Why aren't my jobs running?".center(WIDTH))
     print("─" * WIDTH)
 
+    ###################
+    ## A C C O U N T ##
+    ###################
     if args.account:
         node_id = f"{args.account} (--)"
         if node_id in mytree.tree:
+            mytree.draw_subtree(node_id, args.account)
             fields = ("Account", "User", "Shares", "Usage")
-            print("")
-            print(mytree.get_descendants_table(node_id, decimals=1, sort_by="Usage", tabbing=-2, fields=fields))
+            # TODO: add args.user to get_descendants_table so that line can be bolded/colored, maybe same for dept
+            table = mytree.get_descendants_table(node_id, decimals=1, sort_by="Usage", tabbing=-2, fields=fields)
+            num_table_lines = len(table.splitlines())
+            if "No table since" not in table and num_table_lines > 2:
+                print(f'\nAll users under account "{args.account}" are shown below sorted by "Usage":\n')
+                print(table)
+                print('Note: Users with zero "Usage" are not shown.')
+            elif num_table_lines == 2:
+                print(f'\nAll users under account "{args.account}" are shown below sorted by "Usage":\n')
+                print(table, end="")
+                print('    No users shown since all users have zero "Usage"')
+            else:
+                print(table)
         else:
             msg = f'The Slurm account "{args.account}" was not found in the sshare tree.'
-            print(msg)
+            if "total (--)" in mytree.tree:
+                children_of_total = [child.data.account
+                                     for child in mytree.tree.children("total (--)")]
+                if children_of_total:
+                    msg += " Below is a list of some of the valid accounts:"
+                    print(textwrap.fill(msg, width=WIDTH), end="\n\n")
+                    indent = " " * 4
+                    accounts = textwrap.fill((", ").join(children_of_total),
+                                             width=WIDTH,
+                                             initial_indent=indent,
+                                             subsequent_indent=indent)
+                    print(accounts)
+                    print("\nFor example:")
+                    print(f"\n{indent}$ stree -a {children_of_total[0]}")
+            else:
+                print(msg)
             sys.exit(1)
+        sys.exit(0)
 
     for node_id in mytree.tree.expand_tree():
 
@@ -92,7 +123,6 @@ if __name__ == "__main__":
                         print(f"{' ' * 5 * (i - 1)}|")
                         print(f"{' ' * 5 * (i - 1)} ────", end="")
                 print("\n")
-                wrapper = TextWrapper(width=WIDTH)
                 s = ("Accounts with LevelFS > 1 have been under-served by Slurm. User within "
                      "those accounts will receive a priority boost. Similarly, accounts with "
                      "LevelFS < 1 will receive a priority penalty since they have been over-served. "
@@ -102,7 +132,7 @@ if __name__ == "__main__":
                      "The good news for users in a department with 1 share or a small number of "
                      "shares is that the contributing departments often run fewer jobs "
                      "for periods of time. Then the effective shares increases for everyone else.\n")
-                print(wrapper.fill(s))
+                print(textwrap.fill(s, width=WIDTH))
                 print("More important than shares is your LevelFS Rank at level 2\n")
                 j = SingleJobBreakdown(args.user, fs)
                 j.get_job_data()

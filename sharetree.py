@@ -169,14 +169,14 @@ class ShareTree:
         return [f"{v} {p:>{width_pro}}" for v, p in zip(int_values, proportions)]
 
 
-    def number_of_active_users(self, node_id: str) -> int:
+    def number_of_active_users(self, node_id: str) -> str:
         """Return the number of users with usage greater than zero in the
            descendant nodes of the specified parent node."""
         num_active_users = 0
         for leaf in self.tree.leaves(node_id):
             if "(--)" not in leaf.identifier and int(leaf.data.raw_usage) > 0:
                 num_active_users += 1
-        return num_active_users
+        return str(num_active_users)
 
 
     def min_max_fairshare(self, descendant: TreeLibNode) -> Tuple[str, str]:
@@ -195,6 +195,17 @@ class ShareTree:
         return (f"{minimum:.6f}", f"{maximum:.6f}")
 
 
+    @staticmethod
+    def column_width(values: List[str], name: str) -> Tuple[int, str]:
+        name_width = len(name)
+        values_width = max(map(len, values))
+        if values_width <= name_width:
+            return (name_width, name)
+        num_spaces = (values_width - name_width) // 2
+        name_padded = f"{name}{' ' * num_spaces}"
+        return (values_width, name_padded)
+
+
     def get_descendants_table(self,
                               node_id: str,
                               sort_by: str="LevelFS",
@@ -206,7 +217,7 @@ class ShareTree:
            parent node. This can be used to show which high-level associations
            have contributed."""
         if self.tree[node_id].is_leaf():
-            return f"No table since '{node_id}' is a leaf node."
+            return f'No table since "{node_id.split()[0]}" has no users.'
 
         rows = []
         if fields == ("Account", "User", "Shares", "Usage"):
@@ -260,18 +271,17 @@ class ShareTree:
         user_level = True if self.tree.children(node_id)[0].is_leaf() else False
         width_idx = len(str(len(user))) if user_level else len(str(len(account)))
         width_account = max(len("Account "), max(map(len, account)))
-        width_user = max(len("User"), max(map(len, user)))
+        width_user, label_user = self.column_width(user, "User")
         width_shares = max(len("Shares  "), max(map(len, shares)))
-        width_usage = max(len("Usage    "), max(map(len, usage)))
+        width_usage, label_usage = self.column_width(usage, "Usage")
         width_fair = max(len("FairShare"), max(map(len, fair)))
-        width_lfs = max(len("LevelFS "), max(map(len, lfs)))
-        width_users = max(len("ActiveUsers"), max(map(len, map(str, users))))
+        width_lfs, label_lfs = self.column_width(lfs, "LevelFS")
+        width_users = max(len("ActiveUsers"), max(map(len, users)))
         width_minfs = max(len("min(FairShare)"), max(map(len, minfs)))
         width_maxfs = max(len("max(FairShare)"), max(map(len, maxfs)))
         sp = " " * 3
         tb = " " * 5 * tabbing
         term = Terminal()
-        #print(self.tree.level(node_id), self.tree[node_id].data.account)
         if tabbing == -1:
             table = f"{'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'ActiveUsers ':>{width_users}}\n"
             table += f"{' ' * width_idx}  {'─' * (width_account + width_shares + width_usage + width_lfs + width_users + 4 * len(sp))}\n"
@@ -279,11 +289,11 @@ class ShareTree:
                 table += f"{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}\n"
             return table
         if tabbing == -2:
-            table = f"{'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'User ':>{width_user}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}\n"
-            table += f"{' ' * width_idx}  {'─' * (width_account + width_user + width_shares + width_usage + width_lfs + 4 * len(sp))}\n"
-            for i, (ac, ur, sh, us, lf, ct, mn, mx) in enumerate(zip(account, user, shares, usage, lfs, users, minfs, maxfs)):
-                if "0 " not in us:
-                    table += f"{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{ur:>{width_user}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}\n"
+            table = f"{'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Account ':>{width_account}}{sp}{label_usage:>{width_usage}}{sp}{label_lfs:>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
+            table += f"{' ' * width_idx}  {'─' * (width_user + width_account + width_usage + width_lfs + width_fair + 4 * len(sp))}\n"
+            for i, (ur, ac, us, lf, fr) in enumerate(zip(user, account, usage, lfs, fair)):
+                if us.split()[0] != "0":
+                    table += f"{i+1:>{width_idx}}  {ur:>{width_user}}{sp}{ac:>{width_account}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{fr:>{width_fair}}\n"
             return table
         if user_level:
             table = f"{tb}| {'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"

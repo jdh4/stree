@@ -262,9 +262,9 @@ def test_number_of_active_users():
               "   rdr u5 1 2.0 3 4.0 5.0 6.0\n")
     t.get_raw_data(text=sshare)
     t.parse("aturing")
-    assert t.number_of_active_users("total (--)") == 1
-    assert t.number_of_active_users("ai (--)") == 0
-    assert t.number_of_active_users("pli (--)") == 2
+    assert t.number_of_active_users("total (--)") == "1"
+    assert t.number_of_active_users("ai (--)") == "0"
+    assert t.number_of_active_users("pli (--)") == "2"
 
 
 def test_min_max_fairshare(deep_tree):
@@ -281,3 +281,14 @@ def test_min_max_fairshare(deep_tree):
     assert t.min_max_fairshare(descendant_node) == ("0.500000", "5.500000")
     descendant_node = t.tree["llm (--)"]
     assert t.min_max_fairshare(descendant_node) == ("5.000000", "5.000000")
+
+
+def test_column_width():
+    t = ShareTree()
+    values = ["dog", "fish", "canoe", "tea"]
+    name = "Objects"
+    assert t.column_width(values, name) == (7, name)
+    values = ["213498", "733487461", "91880", "42"]
+    assert t.column_width(values, name) == (9, f"{name} ")
+    values = ["213498", "7334874610", "91880", "42"]
+    assert t.column_width(values, name) == (10, f"{name} ")
