@@ -31,11 +31,11 @@ WIDTH = 80
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description="myshare - Shares of a user in plain language")
+    parser = argparse.ArgumentParser(description="myshare - Shares of a user")
     parser.add_argument("-u", "--user", type=str, default=os.environ["USER"], help="NetID of the user")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show more details")
     parser.add_argument("-d", "--debug", action="store_true", help="Print debug info")
-    parser.add_argument("-a", "--account", type=str, default=None, help="Show usage by user for an account")
+    parser.add_argument("-A", "--account", type=str, default=None, help="Show usage by user for an account")
     args = parser.parse_args()
 
     term = Terminal()
@@ -56,6 +56,7 @@ if __name__ == "__main__":
     print("Why aren't my jobs running?".center(WIDTH))
     print("─" * WIDTH)
 
+
     ###################
     ## A C C O U N T ##
     ###################
@@ -63,18 +64,18 @@ if __name__ == "__main__":
         node_id = f"{args.account} (--)"
         if node_id in mytree.tree:
             mytree.draw_subtree(node_id, args.account)
-            fields = ("Account", "User", "Shares", "Usage")
+            fields = ("User", "Account", "Usage", "LevelFS", "Fairshare")
             # TODO: add args.user to get_descendants_table so that line can be bolded/colored, maybe same for dept
             table = mytree.get_descendants_table(node_id, decimals=1, sort_by="Usage", tabbing=-2, fields=fields)
             num_table_lines = len(table.splitlines())
             if "No table since" not in table and num_table_lines > 2:
-                print(f'\nAll users under account "{args.account}" are shown below sorted by "Usage":\n')
+                print(f'\nAll users under account "{args.account}" are shown below sorted by Usage:\n')
                 print(table)
                 print('Note: Users with zero "Usage" are not shown.')
             elif num_table_lines == 2:
-                print(f'\nAll users under account "{args.account}" are shown below sorted by "Usage":\n')
+                print(f'\nAll users under account "{args.account}" are shown below sorted by Usage:\n')
                 print(table, end="")
-                print('    No users shown since all users have zero "Usage"')
+                print("    No users shown since all users have zero Usage")
             else:
                 print(table)
         else:
@@ -98,8 +99,11 @@ if __name__ == "__main__":
             sys.exit(1)
         sys.exit(0)
 
-    for node_id in mytree.tree.expand_tree():
 
+    #############
+    ## U S E R ##
+    #############
+    for node_id in mytree.tree.expand_tree():
         if node_id.endswith(f" ({args.user})"):
             mytree.draw_subtree(node_id, args.user)
             fs = float(mytree.tree[node_id].data.fair_share)

@@ -11,6 +11,7 @@ from typing import Optional
 from typing import Union
 from typing import List
 from typing import Tuple
+from typing import Dict
 #import config as c
 try:
     from blessed import Terminal
@@ -196,14 +197,49 @@ class ShareTree:
 
 
     @staticmethod
-    def column_width(values: List[str], name: str) -> Tuple[int, str]:
+    def column_width(name: str, values: List[str]) -> Tuple[str, int]:
+        """Return a tuple of the column width and padded column name."""
         name_width = len(name)
         values_width = max(map(len, values))
         if values_width <= name_width:
-            return (name_width, name)
+            return (name, name_width)
         num_spaces = (values_width - name_width) // 2
         name_padded = f"{name}{' ' * num_spaces}"
-        return (values_width, name_padded)
+        return (name_padded, values_width)
+
+
+    @staticmethod
+    def create_table(columns: Dict[str, List[str]], show_zero_usage: bool = False) -> str:
+        """Note that get width of index but that could change since number of
+           users with zero Usage not known."""
+        num_columns = len(columns)
+        names = [""]
+        widths = [len(str(len(next(iter(columns.values())))))]
+        for name, values in columns.items():
+            n, w = ShareTree.column_width(name, values)
+            names.append(n)
+            widths.append(w)
+        index_usage = None
+        if "Usage" in columns:
+            index_usage = list(columns).index("Usage")
+        sp = " " * 3
+        table = f"{names[0]:>{widths[0]}}  "
+        for n, w in zip(names[1:], widths[1:]):
+            table += f"{n:>{w}}{sp}"
+        table += "\n"
+        table += f"{' ' * widths[0]}  {'─' * (sum(widths[1:]) + (num_columns - 1) * len(sp))}\n"
+        ct = 1
+        for i, vals in enumerate(zip(*columns.values())):
+            if not show_zero_usage and index_usage:
+                if vals[index_usage].split()[0] != "0":
+                    row = f"{ct:>{widths[0]}}  "
+                    for j in range(num_columns):
+                        row += f"{vals[j]:>{widths[j+1]}}{sp}"
+                    table += f"{row}\n"
+                    ct += 1
+            else:
+                pass  # show 0's
+        return table
 
 
     def get_descendants_table(self,
@@ -220,8 +256,10 @@ class ShareTree:
             return f'No table since "{node_id.split()[0]}" has no users.'
 
         rows = []
-        if fields == ("Account", "User", "Shares", "Usage"):
-            descendants = [leaf for leaf in self.tree.leaves(node_id) if "(--)" not in leaf.identifier]
+        if fields == ("User", "Account", "Usage", "LevelFS", "Fairshare"):
+            descendants = [leaf
+                           for leaf in self.tree.leaves(node_id)
+                           if "(--)" not in leaf.identifier]
         else:
             descendants = self.tree.children(node_id)
         # not necessarily at child so name should change
@@ -271,11 +309,11 @@ class ShareTree:
         user_level = True if self.tree.children(node_id)[0].is_leaf() else False
         width_idx = len(str(len(user))) if user_level else len(str(len(account)))
         width_account = max(len("Account "), max(map(len, account)))
-        width_user, label_user = self.column_width(user, "User")
+        label_user, width_user = self.column_width("User", user)
         width_shares = max(len("Shares  "), max(map(len, shares)))
-        width_usage, label_usage = self.column_width(usage, "Usage")
+        label_usage, width_usage = self.column_width("Usage", usage)
         width_fair = max(len("FairShare"), max(map(len, fair)))
-        width_lfs, label_lfs = self.column_width(lfs, "LevelFS")
+        label_lfs, width_lfs = self.column_width("LevelFS", lfs)
         width_users = max(len("ActiveUsers"), max(map(len, users)))
         width_minfs = max(len("min(FairShare)"), max(map(len, minfs)))
         width_maxfs = max(len("max(FairShare)"), max(map(len, maxfs)))
@@ -289,11 +327,13 @@ class ShareTree:
                 table += f"{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}\n"
             return table
         if tabbing == -2:
-            table = f"{'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Account ':>{width_account}}{sp}{label_usage:>{width_usage}}{sp}{label_lfs:>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
-            table += f"{' ' * width_idx}  {'─' * (width_user + width_account + width_usage + width_lfs + width_fair + 4 * len(sp))}\n"
-            for i, (ur, ac, us, lf, fr) in enumerate(zip(user, account, usage, lfs, fair)):
-                if us.split()[0] != "0":
-                    table += f"{i+1:>{width_idx}}  {ur:>{width_user}}{sp}{ac:>{width_account}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{fr:>{width_fair}}\n"
+            columns = {"User": user, "Account": account, "Usage": usage, "LevelFS": lfs, "Fairshare": fair}
+            table = self.create_table(columns)
+            #table = f"{'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Account ':>{width_account}}{sp}{label_usage:>{width_usage}}{sp}{label_lfs:>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
+            #table += f"{' ' * width_idx}  {'─' * (width_user + width_account + width_usage + width_lfs + width_fair + 4 * len(sp))}\n"
+            #for i, (ur, ac, us, lf, fr) in enumerate(zip(user, account, usage, lfs, fair)):
+            #    if us.split()[0] != "0":
+            #        table += f"{i+1:>{width_idx}}  {ur:>{width_user}}{sp}{ac:>{width_account}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{fr:>{width_fair}}\n"
             return table
         if user_level:
             table = f"{tb}| {'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
