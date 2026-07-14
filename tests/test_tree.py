@@ -285,10 +285,30 @@ def test_min_max_fairshare(deep_tree):
 
 def test_column_width():
     t = ShareTree()
-    values = ["dog", "fish", "canoe", "tea"]
     name = "Objects"
-    assert t.column_width(values, name) == (7, name)
+    values = ["hat", "fish", "canoe", "tea"]
+    assert t.column_width(name, values) == (name, 7)
     values = ["213498", "733487461", "91880", "42"]
-    assert t.column_width(values, name) == (9, f"{name} ")
+    assert t.column_width(name, values) == (f"{name} ", 9)
     values = ["213498", "7334874610", "91880", "42"]
-    assert t.column_width(values, name) == (10, f"{name} ")
+    assert t.column_width(name, values) == (f"{name} ", 10)
+
+
+def test_create_table():
+    t = ShareTree()
+    columns = {"Account": ["a1", "a2", "a3"]}
+    expected = ("    Account\n"
+                "    ───────\n"
+                "1        a1\n"
+                "2        a2\n"
+                "3        a3\n")
+    assert t.create_table(columns) == expected
+    columns = {"Account": ["a1", "a2", "a3", "a4"],
+               "User": ["u1", "u2", "u3", "u4"],
+               "Usage": ["1111111", "2222222", "3333333", "0"]}
+    expected = ("    Account   User    Usage \n"
+                "    ────────────────────────\n"
+                "1        a1     u1   1111111\n"
+                "2        a2     u2   2222222\n"
+                "3        a3     u3   3333333\n")
+    assert t.create_table(columns, show_zero_usage=False) == expected

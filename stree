@@ -100,6 +100,23 @@ if __name__ == "__main__":
         sys.exit(0)
 
 
+    if False:
+        # get department shares for all accounts
+        accounts_ = []
+        shares_ = []
+        for child in mytree.tree.children("total (--)"):
+            shares = child.data.raw_shares
+            for ch in mytree.tree.children(child.identifier):
+                if ch.data.account not in accounts_:
+                    accounts_.append(ch.data.account)
+                    shares_.append(shares)
+        import csv
+        with open("output.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["account", "shares"])
+            writer.writerows(zip(accounts_, shares_))
+
+
     #############
     ## U S E R ##
     #############
@@ -112,7 +129,18 @@ if __name__ == "__main__":
             print(mytree.explain(fs))
             print(f"Department shares: {mytree.get_dept(node_id)}\n")
             print("")
-            print(mytree.get_descendants_table(node_id="total (--)", decimals=1, sort_by="RawShares", tabbing=-1))
+            print("LevelFS = Shares / Usage")
+            print("")
+            path = list(mytree.tree.rsearch(node_id))
+            path.reverse()
+            user_dept = path[2].split()[0]
+            fields = ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers")
+            print(mytree.get_descendants_table(node_id="total (--)",
+                                               decimals=1,
+                                               sort_by="RawShares",
+                                               tabbing=-1,
+                                               user_dept=user_dept,
+                                               fields=fields))
             if args.verbose:
                 path = list(mytree.tree.rsearch(node_id))
                 path.reverse()
@@ -141,12 +169,13 @@ if __name__ == "__main__":
                 j = SingleJobBreakdown(args.user, fs)
                 j.get_job_data()
                 j.parse()
-                if j.job_dict:
-                    print(j.job_dict)
-                    j.explain()
+                #if j.job_dict:
+                    #print(j.job_dict)
+                    #j.explain()
+                j.explain()
                 sprio_tracker = SprioWeights()
-                sprio_tracker.fetch_live()
-                print(sprio_tracker.weights)
+                #sprio_tracker.fetch_live()
+                #print(sprio_tracker.weights)
 
             if mytree.num_accounts > 1:
                 print("\n\n==============================================================================\n\n")

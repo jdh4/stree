@@ -209,37 +209,57 @@ class ShareTree:
 
 
     @staticmethod
-    def create_table(columns: Dict[str, List[str]], show_zero_usage: bool = False) -> str:
+    def create_table(columns: Dict[str, List[str]],
+                     show_zero_usage: bool = False,
+                     accounts_to_color: Tuple[str, ...] = ()) -> str:
         """Note that get width of index but that could change since number of
            users with zero Usage not known."""
+        if not columns:
+            return ""
+        term = Terminal()
         num_columns = len(columns)
         names = [""]
-        widths = [len(str(len(next(iter(columns.values())))))]
-        for name, values in columns.items():
+        first_column_length = len(next(iter(columns.values())))
+        widths = [len(str(first_column_length))]
+
+        index_usage = None
+        index_account = None
+        for i, (name, values) in enumerate(columns.items()):
             n, w = ShareTree.column_width(name, values)
             names.append(n)
             widths.append(w)
-        index_usage = None
-        if "Usage" in columns:
-            index_usage = list(columns).index("Usage")
+            if name == "Usage":
+                index_usage = i
+            elif name == "Account":
+                index_account = i
         sp = " " * 3
-        table = f"{names[0]:>{widths[0]}}  "
-        for n, w in zip(names[1:], widths[1:]):
-            table += f"{n:>{w}}{sp}"
-        table += "\n"
-        table += f"{' ' * widths[0]}  {'─' * (sum(widths[1:]) + (num_columns - 1) * len(sp))}\n"
-        ct = 1
-        for i, vals in enumerate(zip(*columns.values())):
-            if not show_zero_usage and index_usage:
-                if vals[index_usage].split()[0] != "0":
-                    row = f"{ct:>{widths[0]}}  "
-                    for j in range(num_columns):
-                        row += f"{vals[j]:>{widths[j+1]}}{sp}"
-                    table += f"{row}\n"
-                    ct += 1
-            else:
-                pass  # show 0's
-        return table
+        lines = []
+
+        header_cells = [f"{names[0]:>{widths[0]}}"]
+        header_cells.extend(f"{n:>{w}}" for n, w in zip(names[1:], widths[1:]))
+        lines.append(sp.join(header_cells))
+
+        total_dash_width = sum(widths[1:]) + (num_columns - 1) * len(sp)
+        lines.append(f"{' ' * widths[0]}{sp}{'─' * total_dash_width}")
+
+        row_index = 1
+        for vals in zip(*columns.values()):
+            if not show_zero_usage and index_usage is not None:
+                usage_val = vals[index_usage]
+                if usage_val == "0" or usage_val.startswith("0 "):
+                    continue
+            pre, post = "", ""
+            # TODO only look at first item in accounts to color
+            if accounts_to_color and index_account is not None:
+                if vals[index_account] in accounts_to_color:
+                    pre = f"{term.bold}{term.blue}"
+                    post = f"{term.normal}"
+            row_cells = [f"{row_index:>{widths[0]}}"]
+            row_cells.extend(f"{val:>{widths[j+1]}}" for j, val in enumerate(vals))
+            row_str = sp.join(row_cells)
+            lines.append(f"{pre}{row_str}{post}")
+            row_index += 1
+        return "\n".join(lines) + "\n"
 
 
     def get_descendants_table(self,
@@ -260,6 +280,8 @@ class ShareTree:
             descendants = [leaf
                            for leaf in self.tree.leaves(node_id)
                            if "(--)" not in leaf.identifier]
+        elif fields == ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers"):
+            descendants = self.tree.children(node_id)
         else:
             descendants = self.tree.children(node_id)
         # not necessarily at child so name should change
@@ -306,6 +328,7 @@ class ShareTree:
         if len(set(shares)) > 1:
             shares = self.add_proportions(shares, decimals)
         usage = self.add_proportions(usage, decimals=0)
+
         user_level = True if self.tree.children(node_id)[0].is_leaf() else False
         width_idx = len(str(len(user))) if user_level else len(str(len(account)))
         width_account = max(len("Account "), max(map(len, account)))
@@ -321,19 +344,12 @@ class ShareTree:
         tb = " " * 5 * tabbing
         term = Terminal()
         if tabbing == -1:
-            table = f"{'':>{width_idx}}  {'Account ':>{width_account}}{sp}{'Shares   ':>{width_shares}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'ActiveUsers ':>{width_users}}\n"
-            table += f"{' ' * width_idx}  {'─' * (width_account + width_shares + width_usage + width_lfs + width_users + 4 * len(sp))}\n"
-            for i, (ac, sh, us, lf, ct, mn, mx) in enumerate(zip(account, shares, usage, lfs, users, minfs, maxfs)):
-                table += f"{i+1:>{width_idx}}  {ac:>{width_account}}{sp}{sh:>{width_shares}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{ct:>{width_users}}\n"
+            columns = {"Account": account, "Shares": shares, "Usage": usage, "LevelFS": lfs, "ActiveUsers": users}
+            table = self.create_table(columns, show_zero_usage=True, accounts_to_color=(user_dept,))
             return table
         if tabbing == -2:
             columns = {"User": user, "Account": account, "Usage": usage, "LevelFS": lfs, "Fairshare": fair}
             table = self.create_table(columns)
-            #table = f"{'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Account ':>{width_account}}{sp}{label_usage:>{width_usage}}{sp}{label_lfs:>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
-            #table += f"{' ' * width_idx}  {'─' * (width_user + width_account + width_usage + width_lfs + width_fair + 4 * len(sp))}\n"
-            #for i, (ur, ac, us, lf, fr) in enumerate(zip(user, account, usage, lfs, fair)):
-            #    if us.split()[0] != "0":
-            #        table += f"{i+1:>{width_idx}}  {ur:>{width_user}}{sp}{ac:>{width_account}}{sp}{us:>{width_usage}}{sp}{lf:>{width_lfs}}{sp}{fr:>{width_fair}}\n"
             return table
         if user_level:
             table = f"{tb}| {'':>{width_idx}}  {'User ':>{width_user}}{sp}{'Usage    ':>{width_usage}}{sp}{'LevelFS ':>{width_lfs}}{sp}{'FairShare':>{width_fair}}\n"
@@ -457,11 +473,11 @@ class ShareTree:
         elif lfs < 0.01:
             return str(round(lfs, 3))
         elif lfs < 0.1:
-            return str(round(lfs, 2))
+            return str(round(lfs, 2)) + ""
         elif lfs < 1:
-            return str(round(lfs, 1))
+            return str(round(lfs, 1)) + " "
         elif lfs <= 99999999:
-            return str(round(lfs))
+            return str(round(lfs)) + "   "
         else:
             return f"{lfs:.2e}"
 
