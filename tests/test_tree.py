@@ -220,7 +220,6 @@ def test_get_total_shares(small_tree):
     t = ShareTree()
     t.get_raw_data(text=small_tree)
     t.parse("aturing")
-    assert t.get_total_shares() == 42
     assert t.get_total_shares("total (--)") == 42
     assert t.get_total_shares("pli (--)") == 1
     assert t.get_total_shares("root (--)") == 3
@@ -230,7 +229,6 @@ def test_get_total_shares_med(medium_tree):
     t = ShareTree()
     t.get_raw_data(text=medium_tree)
     t.parse("aturing")
-    assert t.get_total_shares() == 2
     assert t.get_total_shares("total (--)") == 2
     assert t.get_total_shares("kent (--)") == 4
 

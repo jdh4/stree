@@ -127,7 +127,7 @@ if __name__ == "__main__":
             print(mytree.format_fairshare(fs))
             print("")
             print(mytree.explain(fs))
-            print(f"Department shares: {mytree.get_dept(node_id)}\n")
+            #print(f"Department shares: {mytree.get_dept(node_id)}\n")
             print("")
             print("LevelFS = Shares / Usage")
             print("")
@@ -135,7 +135,8 @@ if __name__ == "__main__":
             path.reverse()
             user_dept = path[2].split()[0]
             fields = ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers")
-            print(mytree.get_descendants_table(node_id="total (--)",
+            node_id_dept = "total (--)" if "total (--)" in mytree.tree else "root (--)"
+            print(mytree.get_descendants_table(node_id=node_id_dept,
                                                decimals=1,
                                                sort_by="RawShares",
                                                tabbing=-1,
@@ -144,16 +145,25 @@ if __name__ == "__main__":
             if args.verbose:
                 path = list(mytree.tree.rsearch(node_id))
                 path.reverse()
-                for i, node_id in enumerate(path):
-                    if node_id == "root (--)" or mytree.tree[node_id].is_leaf():
-                        continue
-                    level2 = f"{node_id.split()[0]}"
+                for i, node_id in enumerate(path[:-1]):
+                    #if node_id == "root (--)" or mytree.tree[node_id].is_leaf():
+                    #    continue
+                    level2 = f"{term.bold}{node_id.split()[0]}{term.normal}"
                     print(level2)
-                    user_dept = path[2].split()[0] if node_id == "total (--)" else ""
-                    print(mytree.get_descendants_table(node_id=node_id, decimals=1, tabbing=i-1, user_dept=user_dept), end="")
-                    if not mytree.tree.children(node_id)[0].is_leaf():
-                        print(f"{' ' * 5 * (i - 1)}|")
-                        print(f"{' ' * 5 * (i - 1)} ────", end="")
+                    if node_id == "total (--)":
+                        user_dept = path[2].split()[0]
+                    elif node_id == "root (--)":
+                        user_dept = path[1].split()[0]
+                    else:
+                        user_dept = ""
+                    print(mytree.get_descendants_table(node_id=node_id,
+                                                       decimals=1,
+                                                       tabbing=i,
+                                                       user_dept=user_dept,
+                                                       user_to_color=args.user), end="")
+                    if i < len(path) - 2:
+                        print(f"{' ' * 5 * (i - 0)}│")
+                        print(f"{' ' * 5 * (i - 0)}└────", end="")
                 print("\n")
                 s = ("Accounts with LevelFS > 1 have been under-served by Slurm. User within "
                      "those accounts will receive a priority boost. Similarly, accounts with "
