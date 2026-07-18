@@ -12,13 +12,14 @@ from typing import Union
 from typing import List
 from typing import Tuple
 from typing import Dict
-#import config as c
+import config as c
 try:
     from blessed import Terminal
     blessed_is_available = True
 except ModuleNotFoundError:
     blessed_is_available = False
 
+#TODO move to config
 WIDTH = 80
 
 
@@ -191,9 +192,9 @@ class ShareTree:
                   if node.data.fair_share != "--"]
         if not values:
             return ("--", "--")
-        minimum = min(values)
-        maximum = max(values)
-        return (f"{minimum:.6f}", f"{maximum:.6f}")
+        minimum = self.format_fairshare(min(values))
+        maximum = self.format_fairshare(max(values))
+        return (minimum, maximum)
 
 
     @staticmethod
@@ -214,7 +215,8 @@ class ShareTree:
                      vertical_line: bool = False,
                      indent: str = "",
                      accounts_to_color: Tuple[str, ...] = (),
-                     user_to_color: str = "") -> str:
+                     user_to_color: str = "",
+                     caption: str = "") -> str:
         """Note that get width of index but that could change since number of
            users with zero Usage not known."""
         if not columns:
@@ -264,11 +266,15 @@ class ShareTree:
                 if index_user is not None and vals[index_user] == user_to_color:
                     pre = f"{term.bold}{term.blue}"
                     post = f"{term.normal}"
-            row_cells = [f"{vline}{row_index:>{widths[0]}}"]
+            row_cells = [f"{row_index:>{widths[0]}}"]
             row_cells.extend(f"{val:>{widths[j+1]}}" for j, val in enumerate(vals))
             row_str = sp.join(row_cells)
-            lines.append(f"{pre}{row_str}{post}")
+            lines.append(f"{vline}{pre}{row_str}{post}")
             row_index += 1
+        if caption:
+            lines.append(f"{vline}")
+            for cap in caption.split("\n"):
+                lines.append(f"{vline}  {cap}")
         return "\n".join(lines) + "\n"
 
 
@@ -277,7 +283,8 @@ class ShareTree:
                               sort_by: str = "LevelFS",
                               decimals: int = 0,
                               tabbing: int = 0,
-                              user_dept: str = "",
+                              vertical_line = False,
+                              accounts_to_color: Tuple[str, ...] = (),
                               user_to_color: str = "",
                               fields: Tuple[str, ...] = ()) -> str:
         """Return a table of the children or all descendants of the specified
@@ -325,17 +332,19 @@ class ShareTree:
         users = []
         minfs = []
         maxfs = []
+        minmax = []
         for row in rows:
             ac, ur, sh, us, fr, lf, ct, mn, mx = row
             account.append(ac)
             user.append(ur)
             shares.append(str(sh))
             usage.append(str(us))
-            fair.append(fr)
+            fair.append(self.format_fairshare(fr))
             lfs.append(self.format_levelfs(lf))
             users.append(ct)
             minfs.append(mn)
             maxfs.append(mx)
+            minmax.append(f"[{mn}, {mx}]")
         if len(set(shares)) > 1:
             shares = self.add_proportions(shares, decimals)
         usage = self.add_proportions(usage, decimals=0)
@@ -344,10 +353,10 @@ class ShareTree:
         #print("user-level", user_level, [ch.is_leaf() for ch in self.tree.children(node_id)])
         tb = " " * 5 * tabbing
 
-        if fields == ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers"):
-            # to show shares by department
+        if fields == ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers") and sort_by == "RawShares":
+            # show accounts sorted by shares
             columns = {"Account": account, "Shares": shares, "Usage": usage, "LevelFS": lfs, "ActiveUsers": users}
-            table = self.create_table(columns, show_zero_usage=True, accounts_to_color=(user_dept,))
+            table = self.create_table(columns, show_zero_usage=True, accounts_to_color=accounts_to_color)
             return table
         elif fields == ("User", "Account", "Usage", "LevelFS", "Fairshare"):
             # stree -A <account>
@@ -356,25 +365,34 @@ class ShareTree:
             return table
         elif user_level:
             columns = {"User": user, "Usage": usage, "LevelFS": lfs, "Fairshare": fair}
+            caption_raw = ("Users have essentially the same Fairshare value within a group.")
+            caption = TextWrapper(width=WIDTH).fill(caption_raw)
             table = self.create_table(columns,
                                       show_zero_usage=True,
                                       vertical_line=True,
                                       indent=tb,
-                                      user_to_color=user_to_color)
+                                      user_to_color=user_to_color,
+                                      caption=caption)
             return table
         else:
             columns = {"Account": account,
                        "Shares": shares,
                        "Usage": usage,
                        "LevelFS": lfs,
-                       "ActiveUsers": users,
-                       "min(Fairshare)": minfs,
-                       "max(Fairshare)": maxfs}
+                       "Fairshare": minmax,
+                       "ActiveUsers": users}
+            caption_raw = ("In the table above, the minimum and maximum Fairshare "
+                           "values of the users within each account are shown. "
+                           "Fairshare values are assigned in segments. The users "
+                           "within the account with the highest LevelFS are "
+                           "assigned the highest Fairshare values.")
+            caption = TextWrapper(width=WIDTH).fill(caption_raw)
             table = self.create_table(columns,
                                       show_zero_usage=True,
-                                      vertical_line=True,
+                                      vertical_line=vertical_line,
                                       indent=tb,
-                                      accounts_to_color=(user_dept,))
+                                      accounts_to_color=accounts_to_color,
+                                      caption=caption)
             return table
 
 
@@ -397,7 +415,7 @@ class ShareTree:
             return f"{n}th"
 
 
-    def fairshare_rank(self, fs: float) -> Tuple[str, str, str]:
+    def fairshare_rank(self, fs: str) -> Tuple[str, str, str]:
         """Estimate the rank of the user. One could determine it exactly but
            not so important. Note that the total number of users is used
            instead of the active number of users (where usage > 0)."""
@@ -406,7 +424,7 @@ class ShareTree:
         total_users = sum(1 for leaf in self.tree.leaves() if "(--)" not in leaf.identifier)
         if total_users == 0:
             return ("0 of 0", "0", "bottom")
-        raw_rank = round(total_users * (1 - fs))
+        raw_rank = round(total_users * (1 - float(fs)))
         rank = max(1, min(total_users, raw_rank))
         pct = 100 if rank == 1 else round(100 * (1 - rank / total_users))
         direction = "top" if pct >= 50 else "bottom"
@@ -484,7 +502,7 @@ class ShareTree:
         elif lfs < 0.01:
             return str(round(lfs, 3))
         elif lfs < 0.1:
-            return str(round(lfs, 2)) + ""
+            return str(round(lfs, 2)) + "" if round(lfs, 2) != 0.1 else str(round(lfs, 2)) + " "
         elif lfs < 1:
             return str(round(lfs, 1)) + " "
         elif lfs <= 99999999:
@@ -514,7 +532,9 @@ class ShareTree:
             elif i + 1 == len(path[1:]):
                 tree.create_node(tag=f"{user} (LevelFS: {level}, LevelFS Rank: {rank})", identifier=p, parent=parent)
             elif i == 1:
-                tree.create_node(tag=f"{p.split()[0]} (LevelFS: {level}, LevelFS Rank: {rank}, Shares: {shares}/{total_shares})", identifier=p, parent=parent)
+                # TODO
+                #tree.create_node(tag=f"{p.split()[0]} (LevelFS: {level}, LevelFS Rank: {rank}, Shares: {shares}/{total_shares})", identifier=p, parent=parent)
+                tree.create_node(tag=f"{p.split()[0]} (LevelFS: {level}, LevelFS Rank: {rank})", identifier=p, parent=parent)
             else:
                 tree.create_node(tag=f"{p.split()[0]} (LevelFS: {level}, LevelFS Rank: {rank})", identifier=p, parent=parent)
             parent = p
@@ -537,29 +557,35 @@ class ShareTree:
         return f"{txt}{term.normal}"
 
 
-    # TODO trailing 0 getting lost
     @staticmethod
-    def format_fairshare(fs: float) -> str:
+    def format_fairshare_line(fs: str) -> str:
         """Format and colorize the fairshare value."""
-        fs_str = f"Fairshare: {fs:.6f}"
+        fs_str = f"{float(fs):{f'.{c.FAIRSHARE_DIGITS}f'}}"
         padding = " " * ((WIDTH - len(fs_str)) // 2)
         # set default color
-        if fs >= 0.75:
+        if float(fs) >= 0.75:
             color = "green"
-        elif fs <= 0.28:
+        elif float(fs) <= 0.28:
             color = "red"
         else:
             color = "black"
-        fs_color = ShareTree.colorize(fs, style="bold", color=color)
+        fs_color = ShareTree.colorize(fs_str, style="bold", color=color)
         label = ShareTree.colorize("Fairshare:", style="bold", color="black")
         return f"{padding}{label} {fs_color}"
 
 
-    def explain(self, fs: float) -> str:
+    @staticmethod
+    def format_fairshare(fs: float) -> str:
+        """Return fairshare value with appropriate precision."""
+        return f"{fs:{f'.{c.FAIRSHARE_DIGITS}f'}}"
+
+
+    def explain(self, fs: str) -> str:
         """Return an explain of the fairshare of the user and what they can
            expect for queue times."""
         rank, pct, direction = self.fairshare_rank(fs)
         wrapper = TextWrapper(width=WIDTH)
+        fs = float(fs)
         if fs >= 0.75:
             msg = (f"Good news! You have a high fairshare value of {fs}. Your fairshare "
                    f"rank is {rank} users which puts you in the {direction} {pct} percentile. "

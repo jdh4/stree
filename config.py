@@ -1,3 +1,4 @@
+FAIRSHARE_DIGITS = 4
 DEPT_LEVEL = 2
 IGNORE_TREE_TOTAL = False
 MORE_INFO_URL = "https://researchcomputing.princeton.edu/support/knowledge-base/job-priority"

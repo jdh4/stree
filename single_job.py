@@ -50,7 +50,7 @@ class SingleJobBreakdown:
         print("Job priority is calculated as a weighted sum:\n")
         print("   priority = w_a * AGE + w_q * QOS + w_j * JOBSIZE + w_f * FAIRSHARE")
         print(f"   priority = w_a * AGE + w_q * QOS + w_j * JOBSIZE + 12000 * {self.fairshare}")
-        print(f"   priority = w_a * AGE + w_q * QOS + w_j * JOBSIZE + {round(12000 * self.fairshare)}")
+        print(f"   priority = w_a * AGE + w_q * QOS + w_j * JOBSIZE + {round(12000 * float(self.fairshare))}")
         print("")
         # sprio -S 'Y'
         print("Jobs typically need a priority of 13000 to begin running.")
