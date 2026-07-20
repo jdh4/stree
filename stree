@@ -73,11 +73,11 @@ if __name__ == "__main__":
                                                  user_to_color=args.user)
             num_table_lines = len(table.splitlines())
             if "No table since" not in table and num_table_lines > 2:
-                print(f'\nAll users under account "{args.account}" are shown below sorted by Usage:\n')
+                print(f'\nAll users under Slurm account "{args.account}" are shown below sorted by Usage:\n')
                 print(table)
                 print('Note: Users with zero "Usage" are not shown.')
             elif num_table_lines == 2:
-                print(f'\nAll users under account "{args.account}" are shown below sorted by Usage:\n')
+                print(f'\nAll users under Slurm account "{args.account}" are shown below sorted by Usage:\n')
                 print(table, end="")
                 print("    No users shown since all users have zero Usage")
             else:
@@ -198,9 +198,12 @@ if __name__ == "__main__":
             if mytree.num_accounts > 1:
                 print("\n\n==============================================================================\n\n")
 
-    print("\n")
-    print("-" * 80)
-    print("For more details about your cluster share, run the following command:")
-    print("    $ stree --verbose")
-    print("\nFor more information about job priority, making a financial contribution\nto the cluster, additional GPUs at Princeton:")
-    print(f"    {c.MORE_INFO_URL}")
+    if not args.verbose:
+        print("\n")
+        print("-" * 80)
+        print("For more details about your cluster share, run the following command:")
+        print("    $ stree -v")
+    if args.verbose:
+        print("\nFor more information about job priority, making a financial contribution\nto the cluster, additional GPUs at Princeton:")
+        print(f"    {c.MORE_INFO_URL}")
+        print("To see the users with the highest Usage, run this command: $ stree -A <account")

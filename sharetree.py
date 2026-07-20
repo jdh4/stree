@@ -340,7 +340,7 @@ class ShareTree:
             shares.append(str(sh))
             usage.append(str(us))
             fair.append(self.format_fairshare(fr))
-            lfs.append(self.format_levelfs(lf))
+            lfs.append(self.format_levelfs(lf, padding=True))
             users.append(ct)
             minfs.append(mn)
             maxfs.append(mx)
@@ -487,28 +487,27 @@ class ShareTree:
 
 
     @staticmethod
-    def format_levelfs(lfs: float) -> str:
+    def format_levelfs(lfs: float, padding: bool = False) -> str:
         """Format a LevelFS value for display."""
         if lfs == float("inf"):
-            return "infinity   "
-        if lfs == 0.0:
-            return "0   "
-        if lfs < 0.00001:
-            return f"{lfs:.2e}   "
-        elif lfs < 0.0001:
-            return str(round(lfs, 5))
-        elif lfs < 0.001:
-            return str(round(lfs, 4))
-        elif lfs < 0.01:
-            return str(round(lfs, 3))
-        elif lfs < 0.1:
-            return str(round(lfs, 2)) + "" if round(lfs, 2) != 0.1 else str(round(lfs, 2)) + " "
-        elif lfs < 1:
-            return str(round(lfs, 1)) + " "
-        elif lfs <= 99999999:
-            return str(round(lfs)) + "   "
+            val, pad = "infinity", "    "
+        elif lfs > 99_999_999:
+            val, pad = f"{lfs:.2e}", "    "
+        elif lfs >= 2.5:
+            val, pad = f"{lfs:.0f}", "    "
+        elif lfs >= 0.95:
+            val, pad = f"{lfs:.1f}", "  "
+        elif lfs >= 0.095:
+            val, pad = f"{lfs:.1f}", "  "
+        elif lfs >= 0.0095:
+            val, pad = f"{lfs:.2f}", " "
+        elif lfs >= 0.00095:
+            val, pad = f"{lfs:.3f}", ""
+        elif lfs > 0:
+            val, pad = f"{lfs:.2e}", "   "
         else:
-            return f"{lfs:.2e}   "
+            val, pad = "0", "    "
+        return f"{val}{pad}" if padding else val
 
 
     def draw_subtree(self, node_id: str, netid: str) -> None:
@@ -521,12 +520,12 @@ class ShareTree:
         term = Terminal()
         user = f"{term.bold}{netid}{term.normal}"
         # TODO how to get right node for next line
-        total_shares = self.get_total_shares(node_id)
+        #total_shares = self.get_total_shares(node_id)
         for i, p in enumerate(path[1:]):
             rank = self.get_levelfs_rank(p)
             # TODO added strip
             level = self.format_levelfs(float(self.tree[p].data.level_fs)).strip()
-            shares = self.tree[p].data.raw_shares
+            #shares = self.tree[p].data.raw_shares
             if i == 0:
                 tree.create_node(tag=f"{p.split()[0]}", identifier=p, parent=parent)
             elif i + 1 == len(path[1:]):
@@ -575,17 +574,19 @@ class ShareTree:
 
 
     @staticmethod
-    def format_fairshare(fs: float) -> str:
+    def format_fairshare(fs: Union[float, str]) -> str:
         """Return fairshare value with appropriate precision."""
-        return f"{fs:{f'.{c.FAIRSHARE_DIGITS}f'}}"
+        if fs == "--":
+            return fs
+        return f"{float(fs):{f'.{c.FAIRSHARE_DIGITS}f'}}"
 
 
-    def explain(self, fs: str) -> str:
+    def explain(self, fs_str: str) -> str:
         """Return an explain of the fairshare of the user and what they can
            expect for queue times."""
-        rank, pct, direction = self.fairshare_rank(fs)
+        rank, pct, direction = self.fairshare_rank(fs_str)
         wrapper = TextWrapper(width=WIDTH)
-        fs = float(fs)
+        fs = float(fs_str)
         if fs >= 0.75:
             msg = (f"Good news! You have a high fairshare value of {fs}. Your fairshare "
                    f"rank is {rank} users which puts you in the {direction} {pct} percentile. "

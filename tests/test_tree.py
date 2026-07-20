@@ -1,6 +1,7 @@
 import pytest
 from sharetree import ShareTree
 from treelib.exceptions import DuplicatedNodeIdError
+from config import FAIRSHARE_DIGITS as fsd
 
 
 @pytest.fixture
@@ -193,17 +194,21 @@ def test_add_proportions():
 
 def test_format_levelfs():
     t = ShareTree()
-    assert t.format_levelfs(1.1) == "1"
+    assert t.format_levelfs(1.1) == "1.1"
     assert t.format_levelfs(0.1) == "0.1"
     assert t.format_levelfs(0.10) == "0.1"
     assert t.format_levelfs(0.042) == "0.04"
     assert t.format_levelfs(0.0042) == "0.004"
     assert t.format_levelfs(123.456) == "123"
+    assert t.format_levelfs(9_999_999) == "9999999"
     assert t.format_levelfs(float("inf")) == "infinity"
     assert t.format_levelfs(1.234e+03) == "1234"
     assert t.format_levelfs(1.234e+12) == "1.23e+12"
-    assert t.format_levelfs(0.0095) == "0.009"
+    assert t.format_levelfs(0.0095) == "0.01"
     assert t.format_levelfs(1.234e-06) == "1.23e-06"
+    assert t.format_levelfs(0.0000042) == "4.20e-06"
+    assert t.format_levelfs(0) == "0"
+    assert t.format_levelfs(0.0) == "0"
 
 
 def test_format_percentile():
@@ -270,15 +275,18 @@ def test_min_max_fairshare(deep_tree):
     t.get_raw_data(text=deep_tree)
     t.parse("aturing")
     descendant_node = t.tree["benz (--)"]
-    assert t.min_max_fairshare(descendant_node) == ("0.500000", "5.000000")
+    expected = (f"{0.500000:{f'.{fsd}f'}}", f"{5.000000:{f'.{fsd}f'}}")
+    assert t.min_max_fairshare(descendant_node) == expected
     descendant_node = t.tree["benz (u2)"]
     assert t.min_max_fairshare(descendant_node) == ("--", "--")
     descendant_node = t.tree["cft (--)"]
     assert t.min_max_fairshare(descendant_node) == ("--", "--")
     descendant_node = t.tree["total (--)"]
-    assert t.min_max_fairshare(descendant_node) == ("0.500000", "5.500000")
+    expected = (f"{0.500000:{f'.{fsd}f'}}", f"{5.500000:{f'.{fsd}f'}}")
+    assert t.min_max_fairshare(descendant_node) == expected
     descendant_node = t.tree["llm (--)"]
-    assert t.min_max_fairshare(descendant_node) == ("5.000000", "5.000000")
+    expected = (f"{5.000000:{f'.{fsd}f'}}", f"{5.000000:{f'.{fsd}f'}}")
+    assert t.min_max_fairshare(descendant_node) == expected
 
 
 def test_column_width():
