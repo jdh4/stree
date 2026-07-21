@@ -1,3 +1,6 @@
+# number of characters for output
+WIDTH = 80
+
 # number of digits of precision to show
 FAIRSHARE_DIGITS = 4
 

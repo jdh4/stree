@@ -621,22 +621,34 @@ class ShareTree:
 
     def valid_accounts(self,
                        invalid_account: str,
-                       skip_root: Tuple[Tuple[str, ...], ...] = ()) -> str:
+                       skip_root: Tuple[Tuple[str, ...], ...] = (),
+                       width: int = 80) -> str:
         """Return a comma-separated list of valid accounts to be displayed if
            the user supplies an invalid account."""
-        msg = f'The Slurm account "{invalid_account}" was not found in the sshare tree.'
+        accounts: List[str] = []
         if skip_root:
-            pass
-        if "total (--)" in self.tree:
-            children_of_total = [child.data.account
-                                 for child in self.tree.children("total (--)")]
-            if children_of_total:
-                msg += " Below is a list of some of the valid accounts:\n\n"
-                indent = " " * 4
-                wrapper = textwrap.TextWrapper(width=WIDTH,
-                                               initial_indent=indent,
-                                               subsequent_indent=indent)
-                msg += wrapper.fill((", ").join(children_of_total))
-                msg += "\nFor example:"
-                msg += f"\n{indent}$ stree -A {children_of_total[0]}"
-        return msg
+            for path in skip_root:
+                node_id = f"{path[-1]} (--)"
+                if node_id in self.tree:
+                    accounts.extend(child.data.account
+                                    for child in self.tree.children(node_id)
+                                    if not self.tree[child.identifier].is_leaf())
+        else:
+            node_id = self.tree.root
+            accounts.extend(child.data.account
+                            for child in self.tree.children(node_id))
+
+        msg = f'The Slurm account "{invalid_account}" was not found in the sshare tree.'
+        if not accounts:
+            return msg
+        msg += " Below is a list of some of the valid accounts:"
+        msg = textwrap.fill(msg, width=width)
+        unique_accounts = sorted(set(accounts))
+        indent = " " * 4
+        txt = textwrap.fill(", ".join(unique_accounts),
+                            width=width,
+                            initial_indent=indent,
+                            subsequent_indent=indent)
+        txt += "\n\nFor example:\n"
+        txt += f"{indent}$ stree -A {unique_accounts[0]}"
+        return f"{msg}\n\n{txt}"

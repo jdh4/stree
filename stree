@@ -26,9 +26,6 @@ except ModuleNotFoundError:
     blessed_is_available = False
 
 
-WIDTH = 80
-
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="myshare - Shares of a user")
@@ -52,9 +49,9 @@ if __name__ == "__main__":
     if mytree.num_accounts == 0:
         print(f"{args.user} not found in the sshare tree.")
 
-    print("─" * WIDTH)
-    print("Why aren't my jobs running?".center(WIDTH))
-    print("─" * WIDTH)
+    print("─" * c.WIDTH)
+    print("Why aren't my jobs running?".center(c.WIDTH))
+    print("─" * c.WIDTH)
 
 
     ###################
@@ -83,23 +80,8 @@ if __name__ == "__main__":
             else:
                 print(table)
         else:
-            msg = f'The Slurm account "{args.account}" was not found in the sshare tree.'
-            if "total (--)" in mytree.tree:
-                children_of_total = [child.data.account
-                                     for child in mytree.tree.children("total (--)")]
-                if children_of_total:
-                    msg += " Below is a list of some of the valid accounts:"
-                    print(textwrap.fill(msg, width=WIDTH), end="\n\n")
-                    indent = " " * 4
-                    accounts = textwrap.fill((", ").join(children_of_total),
-                                             width=WIDTH,
-                                             initial_indent=indent,
-                                             subsequent_indent=indent)
-                    print(accounts)
-                    print("\nFor example:")
-                    print(f"\n{indent}$ stree -A {children_of_total[0]}")
-            else:
-                print(msg)
+            msg = mytree.valid_accounts(args.account, c.SPECIAL_SUBTREES, c.WIDTH)
+            print(msg)
             sys.exit(1)
         sys.exit(0)
 
@@ -136,6 +118,7 @@ if __name__ == "__main__":
             node_id_dept = "total (--)" if "total (--)" in mytree.tree else "root (--)"
             path = list(mytree.tree.rsearch(node_id))
             path.reverse()
+            # TODO next line breaks for user root
             accounts_to_color = (path[2].split()[0],)
             fields = ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers")
             if not args.verbose:
@@ -181,7 +164,7 @@ if __name__ == "__main__":
                      "The good news for users in a department with 1 share or a small number of "
                      "shares is that the contributing departments often run fewer jobs "
                      "for periods of time. Then the effective shares increases for everyone else.\n")
-                print(textwrap.fill(s, width=WIDTH))
+                print(textwrap.fill(s, width=c.WIDTH))
                 print("More important than shares is your LevelFS Rank at level 2\n")
                 j = SingleJobBreakdown(args.user, fs)
                 j.get_job_data()
