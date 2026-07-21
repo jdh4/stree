@@ -108,6 +108,21 @@ def test_simple_example_deep(deep_tree):
     assert t.tree["tom (u1)"].data.level_fs == "inf"
 
 
+def test_two_spaces_for_level():
+    t = ShareTree()
+    sshare = ("root 1.0 2 3.0\n"
+              "  cbe 1 2.0 3 4.0 5.0\n"
+              "    pi1 u1 1 2.0 3 4.0 5.0 6.0\n"
+              "  lsi 1 2.0 3 4.0 5.0\n"
+              "    pi2 u2 1 2.0 3 4.0 5.0 6.0\n"
+              "    pi3 u3 1 2.0 3 4.0 5.0 6.0\n")
+    t.get_raw_data(text=sshare)
+    t.parse("aturing")
+    assert t.tree.size() == 6
+    assert t.tree.depth() == 2
+    assert len(t.tree.leaves()) == 3
+
+
 def test_duplication_association():
     with pytest.raises(DuplicatedNodeIdError):
         t = ShareTree()

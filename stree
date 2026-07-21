@@ -133,15 +133,14 @@ if __name__ == "__main__":
             print(mytree.explain(fs))
             #print(f"Department shares: {mytree.get_dept(node_id)}\n")
             print("")
-            print("LevelFS = Shares / Usage")
-            print("")
             node_id_dept = "total (--)" if "total (--)" in mytree.tree else "root (--)"
             path = list(mytree.tree.rsearch(node_id))
             path.reverse()
             accounts_to_color = (path[2].split()[0],)
             fields = ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers")
             if not args.verbose:
-                print("The table below shows the accounts sorted by LevelFS:\n")
+                print("The table below shows the accounts sorted by LevelFS which is normalized")
+                print("Shares divided by normalized Usage:\n")
                 print(mytree.get_descendants_table(node_id=node_id_dept,
                                                    decimals=1,
                                                    sort_by="LevelFS",

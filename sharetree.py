@@ -3,7 +3,7 @@
 
 
 import subprocess
-from textwrap import TextWrapper
+import textwrap
 from treelib import Tree
 from treelib import Node as TreeLibNode
 from treelib.exceptions import DuplicatedNodeIdError
@@ -111,7 +111,10 @@ class ShareTree:
             user = items[1]
             identifier = f"{account} ({user})"
 
-            parent_level = max([lvl for lvl in parent_at_level.keys() if lvl < level], default=-1)
+            parent_level = max([lvl
+                                for lvl in parent_at_level.keys()
+                                if lvl < level],
+                               default=-1)
             current_parent = parent_at_level[parent_level]
 
             if len(items) == 8:
@@ -122,6 +125,20 @@ class ShareTree:
                                       data=TreeNode(*items))
                 if netid == user:
                     self.num_accounts += 1
+            elif len(items) == 5 and "parent" in line:
+                # non-user association with RawShares equals "parent"
+                items.insert(1, "--")
+                items.insert(6, "--")
+                # assign LevelFS from parent
+                items.insert(7, self.tree[current_parent].data.level_fs)
+                # assign RawShares from parent
+                items[2] = self.tree[current_parent].data.raw_shares
+                identifier = f"{account} ({items[1]})"
+                self.tree.create_node(tag=account,
+                                      identifier=identifier,
+                                      parent=current_parent,
+                                      data=TreeNode(*items))
+                parent_at_level[level] = identifier
             elif len(items) == 6:
                 # non-user association
                 items.insert(1, "--")
@@ -366,7 +383,7 @@ class ShareTree:
         elif user_level:
             columns = {"User": user, "Usage": usage, "LevelFS": lfs, "Fairshare": fair}
             caption_raw = ("Users have essentially the same Fairshare value within a group.")
-            caption = TextWrapper(width=WIDTH).fill(caption_raw)
+            caption = textwrap.TextWrapper(width=WIDTH).fill(caption_raw)
             table = self.create_table(columns,
                                       show_zero_usage=True,
                                       vertical_line=True,
@@ -385,8 +402,9 @@ class ShareTree:
                            "values of the users within each account are shown. "
                            "Fairshare values are assigned in segments. The users "
                            "within the account with the highest LevelFS are "
-                           "assigned the highest Fairshare values.")
-            caption = TextWrapper(width=WIDTH).fill(caption_raw)
+                           "assigned the highest Fairshare values. Your Fairshare "
+                           "value has a large impact on your queue time.")
+            caption = textwrap.TextWrapper(width=WIDTH).fill(caption_raw)
             table = self.create_table(columns,
                                       show_zero_usage=True,
                                       vertical_line=vertical_line,
@@ -560,8 +578,7 @@ class ShareTree:
     def format_fairshare_line(fs: str) -> str:
         """Format and colorize the fairshare value."""
         fs_str = f"{float(fs):{f'.{c.FAIRSHARE_DIGITS}f'}}"
-        padding = " " * ((WIDTH - len(fs_str)) // 2)
-        # set default color
+        padding = " " * ((WIDTH - len(fs_str) - len("Fairshare: ")) // 2)
         if float(fs) >= 0.75:
             color = "green"
         elif float(fs) <= 0.28:
@@ -585,18 +602,41 @@ class ShareTree:
         """Return an explain of the fairshare of the user and what they can
            expect for queue times."""
         rank, pct, direction = self.fairshare_rank(fs_str)
-        wrapper = TextWrapper(width=WIDTH)
+        wrapper = textwrap.TextWrapper(width=WIDTH)
         fs = float(fs_str)
         if fs >= 0.75:
-            msg = (f"Good news! You have a high fairshare value of {fs}. Your fairshare "
+            msg = (f"Good news! Your fairshare "
                    f"rank is {rank} users which puts you in the {direction} {pct} percentile. "
                   "You should expect relatively short queue times for small to intermediate size jobs.")
         elif fs >= 0.25 and fs < 0.75:
-            msg = (f"You have a fairshare value of {fs}. Your fairshare rank is {rank} users which puts you in the {direction} {pct} percentile. "
+            msg = (f"Your fairshare rank is {rank} users which puts you in the {direction} {pct} percentile. "
                    "You should expect intermediate to long queue times.")
         elif fs >= 0.0 and fs < 0.25:
-            msg = (f"Bad news! You have a low fairshare value of {fs}. Your fairshare "
+            msg = (f"Bad news! Your fairshare "
                    f"rank is {rank} users which puts you in the {direction} {pct} percentile. You should expect "
                    "long queue times. The tree at the top helps explain why your fairshare is low.")
         # Fairshare varies between 0 to 1. The larger the value the larger the contribution to job priority
         return wrapper.fill(msg)
+
+
+    def valid_accounts(self,
+                       invalid_account: str,
+                       skip_root: Tuple[Tuple[str, ...], ...] = ()) -> str:
+        """Return a comma-separated list of valid accounts to be displayed if
+           the user supplies an invalid account."""
+        msg = f'The Slurm account "{invalid_account}" was not found in the sshare tree.'
+        if skip_root:
+            pass
+        if "total (--)" in self.tree:
+            children_of_total = [child.data.account
+                                 for child in self.tree.children("total (--)")]
+            if children_of_total:
+                msg += " Below is a list of some of the valid accounts:\n\n"
+                indent = " " * 4
+                wrapper = textwrap.TextWrapper(width=WIDTH,
+                                               initial_indent=indent,
+                                               subsequent_indent=indent)
+                msg += wrapper.fill((", ").join(children_of_total))
+                msg += "\nFor example:"
+                msg += f"\n{indent}$ stree -A {children_of_total[0]}"
+        return msg

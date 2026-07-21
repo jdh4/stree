@@ -14,3 +14,9 @@ Different packages needed for dev.
 ```
 conda create --name tree-env python=3.10 treelib blessed pytest ruff mypy pre-commit -c conda-forge
 ```
+
+If need to get cluster name to distinguish different sshare outputs:
+
+```
+scontrol show config | grep '^ClusterName'
+```

@@ -6,10 +6,11 @@ FAIRSHARE_DIGITS = 4
 # this is needed for computing department shares against a total
 # if this path is found then ignore root and start at end of path
 # is a pattern needed to differentiate different clusters?
-SPECIAL_SUBTREES = [("root", "total"), ("root", "pli")]
+SPECIAL_SUBTREES = (("root", "total"), ("root", "pli"))
 SKIP_ROOT_ACCOUNTS = [("root", "total"), ("root", "pli")]
 IGNORE_ROOT = ["root/total", "root>pli"]
 #ROOT_OVERRIDES = []
+
 
 # how to color lines that are both users and accounts such as pli?
 
