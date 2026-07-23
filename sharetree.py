@@ -4,7 +4,6 @@
 
 import subprocess
 import textwrap
-from collections import defaultdict
 from treelib import Tree
 from treelib import Node as TreeLibNode
 from treelib.exceptions import DuplicatedNodeIdError
@@ -70,7 +69,7 @@ class ShareTree:
        https://altlinux.pkgs.org/p11/autoimports-noarch/perl-Slurm-Sshare-1.2.2-alt1.noarch.rpm.html#google_vignette
        https://hpc-docs.uni.lu/slurm/fairsharing/
 
-       Box-drawing characters are used in the oupput."""
+       Box-drawing characters are used in the output."""
 
     def __init__(self) -> None:
         """Create a tree instance and initialize num_accounts which tracks the
@@ -78,6 +77,7 @@ class ShareTree:
         self.lines: List[str] = []
         self.tree = Tree()
         self.num_accounts = 0
+        self.rawshares_parent = 0
 
 
     def get_raw_data(self, text: Optional[str] = None) -> None:
@@ -152,6 +152,7 @@ class ShareTree:
                                       parent=current_parent,
                                       data=TreeNode(*items))
                 parent_at_level[level] = identifier
+                self.rawshares_parent += 1
             elif len(items) == 6:
                 # non-user association
                 items.insert(1, "--")
@@ -180,9 +181,10 @@ class ShareTree:
         s += f"Root node: {self.tree.root}\n"
         s += f"Level 1 nodes: {[item.identifier for item in self.tree.children('root (--)')]}\n"
         s += f"Tree size: {self.tree.size()}\n"
-        s += f"Leaves count: {len(self.tree.leaves())}\n\n"
+        s += f"Leaves count: {len(self.tree.leaves())}\n"
         s += f"Tree depth: {self.tree.depth()}\n"
         s += f"Is total (--) in tree? {'total (--)' in self.tree}\n"
+        s += f'Number of accounts with RawShares equals "parent": {self.rawshares_parent}\n\n'
         return s
 
 
@@ -225,22 +227,6 @@ class ShareTree:
         minimum = self.format_fairshare(min(values))
         maximum = self.format_fairshare(max(values))
         return (minimum, maximum)
-
-    # TODO remove method
-    @staticmethod
-    def groupby(account: List[str], usage: List[str]) -> Tuple[List[str], List[str]]:
-        """Return lists where the sum of usage has been grouped by account."""
-        grouped_data: defaultdict[str, int] = defaultdict(int)
-        usage_ints = [int(u) for u in usage]
-        for acc, val in zip(account, usage_ints):
-            grouped_data[acc] += val
-        unique_accounts = list(grouped_data.keys())
-        #summed_usage = list(grouped_data.values())
-        sorted_items = sorted(grouped_data.items(), key=lambda x: x[1], reverse=True)
-        unique_accounts = [item[0] for item in sorted_items]
-        summed_usage_str = [str(item[1]) for item in sorted_items]
-        summed_usage_props = ShareTree.add_proportions(summed_usage_str)
-        return unique_accounts, summed_usage_props
 
 
     @staticmethod
@@ -331,21 +317,29 @@ class ShareTree:
                               tabbing: int = 0,
                               vertical_line = False,
                               accounts_to_color: Tuple[str, ...] = (),
+                              args_account: Optional[str] = None,
                               user_to_color: str = "",
                               group_by_account: bool = False,
                               output_width: int = 80,
                               fields: Tuple[str, ...] = ()) -> str:
-        """Return a table of the children or all descendants of the specified
-           parent node. This can be used to show which high-level associations
-           have contributed."""
+        """Return a table of the children or all descendants (if -A option is
+           used) of the specified parent node."""
         if self.tree[node_id].is_leaf():
             return f'No table since "{node_id.split()[0]}" has no users.'
 
         rows = []
-        if fields == ("User", "Account", "Usage", "LevelFS", "Fairshare") and not group_by_account:
-            descendants = [leaf
-                           for leaf in self.tree.leaves(node_id)
-                           if "(--)" not in leaf.identifier]
+        # TODO why not leaves=True instead of by fields
+        #if fields == ("User", "Account", "Usage", "LevelFS", "Fairshare"):
+        if args_account is not None:
+            if group_by_account:
+                if not all([ch.is_leaf() for ch in self.tree.children(node_id)]):
+                    descendants = self.tree.children(node_id)
+                else:
+                    return f'There are no accounts under "{args_account}" so -g flag is invalid.'
+            else:
+                descendants = [leaf
+                               for leaf in self.tree.leaves(node_id)
+                               if "(--)" not in leaf.identifier]
         elif fields == ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers"):
             descendants = self.tree.children(node_id)
         else:
@@ -397,8 +391,9 @@ class ShareTree:
             shares = self.add_proportions(shares, decimals)
         usage_props = self.add_proportions(usage, decimals=0)
 
+        # pure accounts, pure users, mixed accounts and users
+        # how to handle the mixed case?
         user_level = True if all([ch.is_leaf() for ch in self.tree.children(node_id)]) else False
-        #print("user-level", user_level, [ch.is_leaf() for ch in self.tree.children(node_id)])
         tb = " " * 5 * tabbing
 
         if fields == ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers") and sort_by == "RawShares":
@@ -406,8 +401,8 @@ class ShareTree:
             columns = {"Account": account, "Shares": shares, "Usage": usage_props, "LevelFS": lfs, "ActiveUsers": users}
             table = self.create_table(columns, show_zero_usage=True, accounts_to_color=accounts_to_color)
             return table
-        elif fields == ("User", "Account", "Usage", "LevelFS", "Fairshare") and not group_by_account:
-            # stree -A <account> [-g]
+        elif args_account is not None and not group_by_account:
+            # stree -A <account>
             columns = {"User": user, "Account": account, "Usage": usage_props, "LevelFS": lfs, "Fairshare": fair}
             table = self.create_table(columns, user_to_color=user_to_color)
             return table
@@ -650,6 +645,26 @@ class ShareTree:
         return wrapper.fill(msg)
 
 
+    def print_account_table(self,
+                            table: str,
+                            account: str,
+                            group_by_account: bool = False) -> None:
+        """Print the table for the specified account."""
+        num_table_lines = len(table.splitlines())
+        ua = "accounts" if group_by_account else "users"
+        if "No table since" not in table and num_table_lines > 2:
+            print(f'\nAll {ua} under Slurm account "{account}" are shown below sorted by Usage:\n')
+            print(table)
+            if not group_by_account:
+                print('Note: Users with zero "Usage" are not shown.')
+        elif num_table_lines == 2:
+            print(f'\nAll {ua} under Slurm account "{account}" are shown below sorted by Usage:\n')
+            print(table, end="")
+            print(f"    No {ua} shown since all users have zero Usage")
+        else:
+            print(table)
+
+
     def get_valid_accounts(self,
                            skip_root_accounts: Tuple[str, ...] = ()) -> List[str]:
         """Return a list of valid high-level accounts if the user supplies an
@@ -672,6 +687,7 @@ class ShareTree:
     def invalid_account_message(self,
                                 invalid_account: str,
                                 valid_accounts: List[str],
+                                group_by_account: bool = False,
                                 output_width: int = 80) -> str:
         """Return a comma-separated list of valid accounts to be displayed if
            the user supplies an invalid account."""
@@ -687,4 +703,5 @@ class ShareTree:
                             subsequent_indent=indent)
         txt += "\n\nFor example:\n"
         txt += f"{indent}$ myshare -A {valid_accounts[0]}"
+        txt += " -g" if group_by_account else ""
         return f"{msg}\n\n{txt}"
