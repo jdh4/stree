@@ -4,6 +4,7 @@
 
 import subprocess
 import textwrap
+from collections import defaultdict
 from treelib import Tree
 from treelib import Node as TreeLibNode
 from treelib.exceptions import DuplicatedNodeIdError
@@ -58,6 +59,18 @@ class ShareTreeError(Exception):
 
 
 class ShareTree:
+
+    """Leading spaces are used to determine the level of each account or user.
+
+       Slurm account names are unique across the accounting hierarchy. This
+       is useful for working with subtrees.
+
+       Other projects
+       https://github.com/molgenis/cluster-utils
+       https://altlinux.pkgs.org/p11/autoimports-noarch/perl-Slurm-Sshare-1.2.2-alt1.noarch.rpm.html#google_vignette
+       https://hpc-docs.uni.lu/slurm/fairsharing/
+
+       Box-drawing characters are used in the oupput."""
 
     def __init__(self) -> None:
         """Create a tree instance and initialize num_accounts which tracks the
@@ -213,6 +226,22 @@ class ShareTree:
         maximum = self.format_fairshare(max(values))
         return (minimum, maximum)
 
+    # TODO remove method
+    @staticmethod
+    def groupby(account: List[str], usage: List[str]) -> Tuple[List[str], List[str]]:
+        """Return lists where the sum of usage has been grouped by account."""
+        grouped_data: defaultdict[str, int] = defaultdict(int)
+        usage_ints = [int(u) for u in usage]
+        for acc, val in zip(account, usage_ints):
+            grouped_data[acc] += val
+        unique_accounts = list(grouped_data.keys())
+        #summed_usage = list(grouped_data.values())
+        sorted_items = sorted(grouped_data.items(), key=lambda x: x[1], reverse=True)
+        unique_accounts = [item[0] for item in sorted_items]
+        summed_usage_str = [str(item[1]) for item in sorted_items]
+        summed_usage_props = ShareTree.add_proportions(summed_usage_str)
+        return unique_accounts, summed_usage_props
+
 
     @staticmethod
     def column_width(name: str, values: List[str]) -> Tuple[str, int]:
@@ -303,6 +332,8 @@ class ShareTree:
                               vertical_line = False,
                               accounts_to_color: Tuple[str, ...] = (),
                               user_to_color: str = "",
+                              group_by_account: bool = False,
+                              output_width: int = 80,
                               fields: Tuple[str, ...] = ()) -> str:
         """Return a table of the children or all descendants of the specified
            parent node. This can be used to show which high-level associations
@@ -311,7 +342,7 @@ class ShareTree:
             return f'No table since "{node_id.split()[0]}" has no users.'
 
         rows = []
-        if fields == ("User", "Account", "Usage", "LevelFS", "Fairshare"):
+        if fields == ("User", "Account", "Usage", "LevelFS", "Fairshare") and not group_by_account:
             descendants = [leaf
                            for leaf in self.tree.leaves(node_id)
                            if "(--)" not in leaf.identifier]
@@ -364,7 +395,7 @@ class ShareTree:
             minmax.append(f"[{mn}, {mx}]")
         if len(set(shares)) > 1:
             shares = self.add_proportions(shares, decimals)
-        usage = self.add_proportions(usage, decimals=0)
+        usage_props = self.add_proportions(usage, decimals=0)
 
         user_level = True if all([ch.is_leaf() for ch in self.tree.children(node_id)]) else False
         #print("user-level", user_level, [ch.is_leaf() for ch in self.tree.children(node_id)])
@@ -372,18 +403,18 @@ class ShareTree:
 
         if fields == ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers") and sort_by == "RawShares":
             # show accounts sorted by shares
-            columns = {"Account": account, "Shares": shares, "Usage": usage, "LevelFS": lfs, "ActiveUsers": users}
+            columns = {"Account": account, "Shares": shares, "Usage": usage_props, "LevelFS": lfs, "ActiveUsers": users}
             table = self.create_table(columns, show_zero_usage=True, accounts_to_color=accounts_to_color)
             return table
-        elif fields == ("User", "Account", "Usage", "LevelFS", "Fairshare"):
-            # stree -A <account>
-            columns = {"User": user, "Account": account, "Usage": usage, "LevelFS": lfs, "Fairshare": fair}
+        elif fields == ("User", "Account", "Usage", "LevelFS", "Fairshare") and not group_by_account:
+            # stree -A <account> [-g]
+            columns = {"User": user, "Account": account, "Usage": usage_props, "LevelFS": lfs, "Fairshare": fair}
             table = self.create_table(columns, user_to_color=user_to_color)
             return table
         elif user_level:
-            columns = {"User": user, "Usage": usage, "LevelFS": lfs, "Fairshare": fair}
+            columns = {"User": user, "Usage": usage_props, "LevelFS": lfs, "Fairshare": fair}
             caption_raw = ("Users have essentially the same Fairshare value within a group.")
-            caption = textwrap.TextWrapper(width=WIDTH).fill(caption_raw)
+            caption = textwrap.TextWrapper(width=output_width).fill(caption_raw)
             table = self.create_table(columns,
                                       show_zero_usage=True,
                                       vertical_line=True,
@@ -394,7 +425,7 @@ class ShareTree:
         else:
             columns = {"Account": account,
                        "Shares": shares,
-                       "Usage": usage,
+                       "Usage": usage_props,
                        "LevelFS": lfs,
                        "Fairshare": minmax,
                        "ActiveUsers": users}
@@ -404,7 +435,7 @@ class ShareTree:
                            "within the account with the highest LevelFS are "
                            "assigned the highest Fairshare values. Your Fairshare "
                            "value has a large impact on your queue time.")
-            caption = textwrap.TextWrapper(width=WIDTH).fill(caption_raw)
+            caption = textwrap.TextWrapper(width=output_width).fill(caption_raw)
             table = self.create_table(columns,
                                       show_zero_usage=True,
                                       vertical_line=vertical_line,
@@ -619,16 +650,14 @@ class ShareTree:
         return wrapper.fill(msg)
 
 
-    def valid_accounts(self,
-                       invalid_account: str,
-                       skip_root: Tuple[Tuple[str, ...], ...] = (),
-                       width: int = 80) -> str:
-        """Return a comma-separated list of valid accounts to be displayed if
-           the user supplies an invalid account."""
+    def get_valid_accounts(self,
+                           skip_root_accounts: Tuple[str, ...] = ()) -> List[str]:
+        """Return a list of valid high-level accounts if the user supplies an
+           account through the -A option that is not found in the tree."""
         accounts: List[str] = []
-        if skip_root:
-            for path in skip_root:
-                node_id = f"{path[-1]} (--)"
+        if skip_root_accounts:
+            for sr_account in skip_root_accounts:
+                node_id = f"{sr_account} (--)"
                 if node_id in self.tree:
                     accounts.extend(child.data.account
                                     for child in self.tree.children(node_id)
@@ -637,18 +666,25 @@ class ShareTree:
             node_id = self.tree.root
             accounts.extend(child.data.account
                             for child in self.tree.children(node_id))
+        return accounts
 
+
+    def invalid_account_message(self,
+                                invalid_account: str,
+                                valid_accounts: List[str],
+                                output_width: int = 80) -> str:
+        """Return a comma-separated list of valid accounts to be displayed if
+           the user supplies an invalid account."""
         msg = f'The Slurm account "{invalid_account}" was not found in the sshare tree.'
-        if not accounts:
+        if not valid_accounts:
             return msg
         msg += " Below is a list of some of the valid accounts:"
-        msg = textwrap.fill(msg, width=width)
-        unique_accounts = sorted(set(accounts))
+        msg = textwrap.fill(msg, width=output_width)
         indent = " " * 4
-        txt = textwrap.fill(", ".join(unique_accounts),
-                            width=width,
+        txt = textwrap.fill(", ".join(valid_accounts),
+                            width=output_width,
                             initial_indent=indent,
                             subsequent_indent=indent)
         txt += "\n\nFor example:\n"
-        txt += f"{indent}$ stree -A {unique_accounts[0]}"
+        txt += f"{indent}$ myshare -A {valid_accounts[0]}"
         return f"{msg}\n\n{txt}"

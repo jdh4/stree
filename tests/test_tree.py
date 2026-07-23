@@ -333,3 +333,33 @@ def test_create_table():
                 "2        a2     u2   2222222\n"
                 "3        a3     u3   3333333\n")
     assert t.create_table(columns, show_zero_usage=False) == expected
+
+
+def test_get_valid_accounts(deep_tree):
+    t = ShareTree()
+    t.get_raw_data(text=deep_tree)
+    t.parse("aturing")
+    expected = ["total", "cft", "pli"]
+    t.get_valid_accounts(skip_root_accounts=()) == expected
+    expected = ["chem", "orfe"]
+    t.get_valid_accounts(skip_root_accounts=("total")) == expected
+    expected = ["chem", "orfe", "llm"]
+    t.get_valid_accounts(skip_root_accounts=("total", "cft", "pli")) == expected
+
+
+def test_invalid_account_message(small_tree):
+    t = ShareTree()
+    t.get_raw_data(text=small_tree)
+    t.parse("aturing")
+    indent = " " * 4
+    expected = (f'The Slurm account "bigfoot" was not found in the '
+                f"sshare tree. Below is a list of\nsome of the valid accounts:\n\n"
+                f"{indent}chem, orfe, pli\n\n"
+                f"For example:\n"
+                f"{indent}$ myshare -A chem")
+    result = t.invalid_account_message("bigfoot",
+                                       valid_accounts=["chem", "orfe", "pli"],
+                                       output_width=80)
+    assert result == expected
+    expected = 'The Slurm account "bigfoot" was not found in the sshare tree.'
+    assert t.invalid_account_message("bigfoot", valid_accounts=[]) == expected
