@@ -408,7 +408,7 @@ class ShareTree:
             return table
         elif user_level:
             columns = {"User": user, "Usage": usage_props, "LevelFS": lfs, "Fairshare": fair}
-            caption_raw = ("Users have essentially the same Fairshare value within a group.")
+            caption_raw = ("Users in the same low-level account have essentially the same Fairshare value.")
             caption = textwrap.TextWrapper(width=output_width).fill(caption_raw)
             table = self.create_table(columns,
                                       show_zero_usage=True,
@@ -428,8 +428,8 @@ class ShareTree:
                            "values of the users within each account are shown. "
                            "Fairshare values are assigned in segments. The users "
                            "within the account with the highest LevelFS are "
-                           "assigned the highest Fairshare values. Your Fairshare "
-                           "value has a large impact on your queue time.")
+                           "assigned the highest Fairshare values. The higher your "
+                           "Fairshare, the shorter your queue time.")
             caption = textwrap.TextWrapper(width=output_width).fill(caption_raw)
             table = self.create_table(columns,
                                       show_zero_usage=True,

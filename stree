@@ -1,4 +1,4 @@
-#!/home/jdh4/.conda/envs/tree-env/bin/python
+#!/scratch/jdh4/envs/tree-env/bin/python3
 
 """Leading spaces in each line of the output of sshare are used to determine
    the level of the tree.
@@ -54,7 +54,7 @@ if __name__ == "__main__":
         print(f"{args.user} not found in the sshare tree.")
 
     print("─" * c.WIDTH)
-    print("Why aren't my jobs running?".center(c.WIDTH))
+    print("Why Aren't My Jobs Running?".center(c.WIDTH))
     print("─" * c.WIDTH)
 
 
@@ -87,8 +87,10 @@ if __name__ == "__main__":
     #############
     ## U S E R ##
     #############
+    num_accounts_shown = 0
     for node_id in mytree.tree.expand_tree():
         if node_id.endswith(f" ({args.user})"):
+            num_accounts_shown += 1
             mytree.draw_subtree(node_id, args.user)
             fs = mytree.tree[node_id].data.fair_share
             print(mytree.format_fairshare_line(fs))
@@ -121,7 +123,9 @@ if __name__ == "__main__":
                                                    output_width=c.WIDTH,
                                                    fields=fields))
             if args.verbose:
-                print("The table below shows the accounts sorted by Shares:\n")
+                print("The Shares of an account determines the Usage when the cluster is busy.")
+                down = "\u2193"
+                print(f"The table below ({down}) shows the accounts sorted by Shares:\n")
                 print(mytree.get_descendants_table(node_id=node_id_dept,
                                                    decimals=1,
                                                    sort_by="RawShares",
@@ -133,6 +137,10 @@ if __name__ == "__main__":
                 if "root (--)" in path and "total (--)" in path:
                     path.remove("root (--)")
                 accounts_to_color = tuple([p.split()[0] for p in path[:-1]])
+                print("\nThe tables below show the accounts sorted by LevelFS which is normalized")
+                print("Shares divided by normalized Usage. Slurm sorts accounts by LevelFS when")
+                print("determining the fairshare values of the individual users. Higher")
+                print("LevelFS is better for job priority.\n")
                 for i, nid in enumerate(path[:-1]):
                     level2 = f"{term.bold}{nid.split()[0]}{term.normal}"
                     print(level2)
@@ -169,8 +177,10 @@ if __name__ == "__main__":
                 #sprio_tracker.fetch_live()
                 #print(sprio_tracker.weights)
 
-            if mytree.num_accounts > 1:
-                print("\n\n==============================================================================\n\n")
+            if mytree.num_accounts > 1 and num_accounts_shown < mytree.num_accounts:
+                print("\n\n==============================================================================")
+                print("==============================================================================")
+                print("==============================================================================\n\n")
 
     if not args.verbose:
         print("\n")

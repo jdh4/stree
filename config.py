@@ -1,4 +1,4 @@
-# how to color lines that are both users and accounts such as pli?
+# how to color lines that are both users and accounts such as pli and geoclim?
 
 
 # number of characters for output
@@ -7,8 +7,9 @@ WIDTH = 80
 # number of digits of precision to show
 FAIRSHARE_DIGITS = 4
 
-USAGE_PROPORTIONS_DIGITS = 0
-SHARES_PROPORTIONS_DIGITS = 0
+USAGE_DIGITS = 0
+SHARES_DIGITS = 0
+SHARES_PREC = 0
 
 # if this path is found for a given node then ignore root
 # otherwise level 1 of the tree is considered where slurm does the most important stuff
@@ -28,4 +29,7 @@ REPEAT_ALL_TABLES = False
 
 SHOW_ZERO_USAGE = False
 
-# how to tell about CS, LSI, PNI, MATH
+# show or ignore the weights paragraph
+INCLUDE_JOB_PRIORITY_POST_AMBLE = True
+
+# how to tell about CS, LSI, PNI, MATH, cloud computing
