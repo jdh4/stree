@@ -322,14 +322,15 @@ class ShareTree:
                               group_by_account: bool = False,
                               output_width: int = 80,
                               fields: Tuple[str, ...] = ()) -> str:
-        """Return a table of the children or all descendants (if -A option is
-           used) of the specified parent node."""
+        """Return a data table of the children or all descendants (if -A option
+           is used) of the specified parent node.
+
+           It is okay to sort by RawShares since 'parent' has been replaced by
+           the parent value."""
         if self.tree[node_id].is_leaf():
-            return f'No table since "{node_id.split()[0]}" has no users.'
+            return f'No table since "{node_id.split()[0]}" has no descendants.'
 
         rows = []
-        # TODO why not leaves=True instead of by fields
-        #if fields == ("User", "Account", "Usage", "LevelFS", "Fairshare"):
         if args_account is not None:
             if group_by_account:
                 if not all([ch.is_leaf() for ch in self.tree.children(node_id)]):
@@ -340,31 +341,29 @@ class ShareTree:
                 descendants = [leaf
                                for leaf in self.tree.leaves(node_id)
                                if "(--)" not in leaf.identifier]
-        elif fields == ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers"):
-            descendants = self.tree.children(node_id)
         else:
             descendants = self.tree.children(node_id)
-        # not necessarily at child so name should change
-        for child in descendants:
-            num_active_users = self.number_of_active_users(child.identifier)
-            min_fs, max_fs = self.min_max_fairshare(child)
-            rows.append([child.data.account,
-                         child.data.user,
-                         int(child.data.raw_shares),
-                         int(child.data.raw_usage),
-                         child.data.fair_share,
-                         float(child.data.level_fs),
+
+        for desc in descendants:
+            num_active_users = self.number_of_active_users(desc.identifier)
+            min_fs, max_fs = self.min_max_fairshare(desc)
+            rows.append([desc.data.account,
+                         desc.data.user,
+                         int(desc.data.raw_shares),
+                         int(desc.data.raw_usage),
+                         desc.data.fair_share,
+                         float(desc.data.level_fs),
                          num_active_users,
-                         min_fs,
-                         max_fs])
+                         f"[{min_fs}, {max_fs}]"])
         if sort_by == "LevelFS":
             rows.sort(key=lambda x: x[5], reverse=True)
-        elif sort_by == "RawShares":
-            rows.sort(key=lambda x: x[2], reverse=True)
         elif sort_by == "Usage":
             rows.sort(key=lambda x: x[3], reverse=True)
-        else:
+        elif sort_by == "RawShares":
             rows.sort(key=lambda x: x[2], reverse=True)
+        else:
+            raise ValueError(f"Invalid sort_by value: {sort_by!r}.")
+
         account = []
         user = []
         shares = []
@@ -372,11 +371,9 @@ class ShareTree:
         fair = []
         lfs = []
         users = []
-        minfs = []
-        maxfs = []
         minmax = []
         for row in rows:
-            ac, ur, sh, us, fr, lf, ct, mn, mx = row
+            ac, ur, sh, us, fr, lf, ct, mnmx = row
             account.append(ac)
             user.append(ur)
             shares.append(str(sh))
@@ -384,31 +381,47 @@ class ShareTree:
             fair.append(self.format_fairshare(fr))
             lfs.append(self.format_levelfs(lf, padding=True))
             users.append(ct)
-            minfs.append(mn)
-            maxfs.append(mx)
-            minmax.append(f"[{mn}, {mx}]")
+            minmax.append(mnmx)
+
         if len(set(shares)) > 1:
             shares = self.add_proportions(shares, decimals)
         usage_props = self.add_proportions(usage, decimals=0)
 
-        # pure accounts, pure users, mixed accounts and users
-        # how to handle the mixed case?
-        user_level = True if all([ch.is_leaf() for ch in self.tree.children(node_id)]) else False
-        tb = " " * 5 * tabbing
+        all_users = True if all([ch.is_leaf() and "(--)" not in ch.identifier
+                                 for ch in self.tree.children(node_id)]) else False
+        mixed = False
+        num_leaves = sum([ch.is_leaf() for ch in self.tree.children(node_id)])
+        if num_leaves > 0 and num_leaves < len(self.tree.children(node_id)):
+            mixed = True
 
+        tb = " " * 5 * tabbing
         if fields == ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers") and sort_by == "RawShares":
             # show accounts sorted by shares
-            columns = {"Account": account, "Shares": shares, "Usage": usage_props, "LevelFS": lfs, "ActiveUsers": users}
-            table = self.create_table(columns, show_zero_usage=True, accounts_to_color=accounts_to_color)
+            columns = {"Account": account,
+                       "Shares": shares,
+                       "Usage": usage_props,
+                       "LevelFS": lfs,
+                       "ActiveUsers": users}
+            table = self.create_table(columns,
+                                      show_zero_usage=True,
+                                      accounts_to_color=accounts_to_color)
             return table
         elif args_account is not None and not group_by_account:
             # stree -A <account>
-            columns = {"User": user, "Account": account, "Usage": usage_props, "LevelFS": lfs, "Fairshare": fair}
+            columns = {"User": user,
+                       "Account": account,
+                       "Usage": usage_props,
+                       "LevelFS": lfs,
+                       "Fairshare": fair}
             table = self.create_table(columns, user_to_color=user_to_color)
             return table
-        elif user_level:
-            columns = {"User": user, "Usage": usage_props, "LevelFS": lfs, "Fairshare": fair}
-            caption_raw = ("Users in the same low-level account have essentially the same Fairshare value.")
+        elif all_users:
+            columns = {"User": user,
+                       "Usage": usage_props,
+                       "LevelFS": lfs,
+                       "Fairshare": fair}
+            caption_raw = ("Users in the same low-level account have "
+                           "essentially the same Fairshare value.")
             caption = textwrap.TextWrapper(width=output_width).fill(caption_raw)
             table = self.create_table(columns,
                                       show_zero_usage=True,
@@ -416,6 +429,22 @@ class ShareTree:
                                       indent=tb,
                                       user_to_color=user_to_color,
                                       caption=caption)
+            return table
+        elif mixed:
+            columns = {"Account": account,
+                       "User": user,
+                       "Usage": usage_props,
+                       "LevelFS": lfs,
+                       "Fairshare": fair}
+            caption_raw = ("Mixed accounts with users.")
+            caption = textwrap.TextWrapper(width=output_width).fill(caption_raw)
+            table = self.create_table(columns,
+                                      show_zero_usage=True,
+                                      vertical_line=vertical_line,
+                                      indent=tb,
+                                      user_to_color=user_to_color,
+                                      caption=caption)
+                                      #accounts_to_color=accounts_to_color,
             return table
         else:
             columns = {"Account": account,

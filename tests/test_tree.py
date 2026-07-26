@@ -13,7 +13,10 @@ def small_tree():
               "  orfe jdh4 41 2.0 3 4.0 5.0 6.0\n"
               " pli 1 2.0 3 4.0 5.0\n"
               "  pli jdh4 1 2.0 3 4.0 5.0 6.0\n")
-    return sshare
+    t = ShareTree()
+    t.get_raw_data(text=sshare)
+    t.parse("aturing")
+    return t
 
 
 @pytest.fixture
@@ -36,7 +39,10 @@ def medium_tree():
               "    kent u4 1 2.0 3 4.0 5.0 inf\n"
               " pli 1 2.0 3 4.0 5.0\n"
               "  pli u1 1 2.0 3 4.0 5.0 6.0\n")
-    return sshare
+    t = ShareTree()
+    t.get_raw_data(text=sshare)
+    t.parse("aturing")
+    return t
 
 
 @pytest.fixture
@@ -59,13 +65,30 @@ def deep_tree():
               "  pli u2 1 2.0 3 4.0 5.0 6.0\n"
               "  llm 1 2.0 3 4.0 5.0\n"
               "   tom u1 1 2.0 3 4.0 5.0 inf\n")
-    return sshare
+    t = ShareTree()
+    t.get_raw_data(text=sshare)
+    t.parse("aturing")
+    return t
+
+
+@pytest.fixture
+def account_tree():
+    sshare = ("root 1.0 2 3.0\n"
+              " root root 1 2.0 3 4.0 5.0 6.0\n"
+              " cft 1 2.0 3 4.0 5.0\n"
+              " pli 1 2.0 3 4.0 5.0\n"
+              "  pli u1 1 2.0 33 4.0 0.5 6.0\n"
+              "  pli u2 1 2.0 3 4.0 0.55 6.0\n"
+              "  llm 1 2.0 3 4.0 5.0\n"
+              "   tom u1 1 2.0 333 4.0 0.555 inf\n")
+    t = ShareTree()
+    t.get_raw_data(text=sshare)
+    t.parse("aturing")
+    return t
 
 
 def test_simple_example(small_tree):
-    t = ShareTree()
-    t.get_raw_data(text=small_tree)
-    t.parse("aturing")
+    t = small_tree
     assert t.tree.size() == 7
     assert t.tree.depth() == 2
     assert len(t.tree.leaves()) == 4
@@ -76,9 +99,7 @@ def test_simple_example(small_tree):
 
 
 def test_simple_example_med(medium_tree):
-    t = ShareTree()
-    t.get_raw_data(text=medium_tree)
-    t.parse("aturing")
+    t = medium_tree
     assert t.tree.size() == 18
     assert t.tree.depth() == 4
     assert len(t.tree.leaves()) == 10
@@ -93,9 +114,7 @@ def test_simple_example_med(medium_tree):
 
 
 def test_simple_example_deep(deep_tree):
-    t = ShareTree()
-    t.get_raw_data(text=deep_tree)
-    t.parse("aturing")
+    t = deep_tree
     assert t.tree.size() == 18
     assert t.tree.depth() == 6
     assert len(t.tree.leaves()) == 8
@@ -171,9 +190,7 @@ def test_get_levelfs_rank():
 
 
 def test_get_levelfs_rank_med(medium_tree):
-    t = ShareTree()
-    t.get_raw_data(text=medium_tree)
-    t.parse("aturing")
+    t = medium_tree
     assert t.get_levelfs_rank("chem (--)") == "2/2"
     assert t.get_levelfs_rank("orfe (--)") == "1/2"
     assert t.get_levelfs_rank("rcar (u1)") == "2/2"
@@ -226,37 +243,33 @@ def test_format_levelfs():
     assert t.format_levelfs(0.0) == "0"
 
 
-def test_format_percentile():
+@pytest.mark.parametrize("pct, expected", [
+    (100, "100th"),
+    (78, "78th"),
+    (53, "53rd"),
+    (42, "42nd"),
+    (21, "21st"),
+    (0, "0th")])
+def test_format_percentile(pct, expected):
     t = ShareTree()
-    assert t.format_percentile(100) == "100th"
-    assert t.format_percentile(78) == "78th"
-    assert t.format_percentile(53) == "53rd"
-    assert t.format_percentile(42) == "42nd"
-    assert t.format_percentile(21) == "21st"
-    assert t.format_percentile(0) == "0th"
+    assert t.format_percentile(pct) == expected
 
 
 def test_get_total_shares(small_tree):
-    t = ShareTree()
-    t.get_raw_data(text=small_tree)
-    t.parse("aturing")
+    t = small_tree
     assert t.get_total_shares("total (--)") == 42
     assert t.get_total_shares("pli (--)") == 1
     assert t.get_total_shares("root (--)") == 3
 
 
 def test_get_total_shares_med(medium_tree):
-    t = ShareTree()
-    t.get_raw_data(text=medium_tree)
-    t.parse("aturing")
+    t = medium_tree
     assert t.get_total_shares("total (--)") == 2
     assert t.get_total_shares("kent (--)") == 4
 
 
 def test_fairshare_rank(medium_tree):
-    t = ShareTree()
-    t.get_raw_data(text=medium_tree)
-    t.parse("aturing")
+    t = medium_tree
     assert t.fairshare_rank(1.0) == ("1 of 10", "100th", "top")
     assert t.fairshare_rank(0.75) == ("2 of 10", "80th", "top")
     assert t.fairshare_rank(0.5) == ("5 of 10", "50th", "top")
@@ -286,9 +299,7 @@ def test_number_of_active_users():
 
 
 def test_min_max_fairshare(deep_tree):
-    t = ShareTree()
-    t.get_raw_data(text=deep_tree)
-    t.parse("aturing")
+    t = deep_tree
     descendant_node = t.tree["benz (--)"]
     expected = (f"{0.500000:{f'.{fsd}f'}}", f"{5.000000:{f'.{fsd}f'}}")
     assert t.min_max_fairshare(descendant_node) == expected
@@ -336,9 +347,7 @@ def test_create_table():
 
 
 def test_get_valid_accounts(deep_tree):
-    t = ShareTree()
-    t.get_raw_data(text=deep_tree)
-    t.parse("aturing")
+    t = deep_tree
     expected = ["total", "cft", "pli"]
     t.get_valid_accounts(skip_root_accounts=()) == expected
     expected = ["chem", "orfe"]
@@ -348,9 +357,7 @@ def test_get_valid_accounts(deep_tree):
 
 
 def test_invalid_account_message(small_tree):
-    t = ShareTree()
-    t.get_raw_data(text=small_tree)
-    t.parse("aturing")
+    t = small_tree
     indent = " " * 4
     expected = (f'The Slurm account "bigfoot" was not found in the '
                 f"sshare tree. Below is a list of\nsome of the valid accounts:\n\n"
@@ -363,3 +370,16 @@ def test_invalid_account_message(small_tree):
     assert result == expected
     expected = 'The Slurm account "bigfoot" was not found in the sshare tree.'
     assert t.invalid_account_message("bigfoot", valid_accounts=[]) == expected
+
+
+def test_get_descendants_table(account_tree):
+    t = account_tree
+    expected = 'No table since "cft" has no descendants.'
+    assert t.get_descendants_table(node_id="cft (--)") == expected
+    # users within a specific account
+    expected = ("    User   Account     Usage        LevelFS     Fairshare\n"
+                "    ─────────────────────────────────────────────────────\n"
+                "1     u1       tom   333 (90%)   infinity          0.5550\n"
+                "2     u1       pli    33  (9%)          6          0.5000\n"
+                "3     u2       pli     3  (1%)          6          0.5500\n")
+    assert t.get_descendants_table(node_id="pli (--)", args_account="pli") == expected
