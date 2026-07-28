@@ -1,6 +1,3 @@
-# how to color lines that are both users and accounts such as pli and geoclim?
-
-
 # number of characters for output
 WIDTH = 80
 
@@ -32,4 +29,8 @@ SHOW_ZERO_USAGE = False
 # show or ignore the weights paragraph
 INCLUDE_JOB_PRIORITY_POST_AMBLE = True
 
-# how to tell about CS, LSI, PNI, MATH, cloud computing
+# instead of bold for Shares column could also only show account and shares
+# how to tell about CS, LSI, PNI, MATH, cloud computing?
+# how to specify the priority needed for a job to run per cluster?
+# CLI option to show users with zero usage
+# how can a user only see the data for one account of their many (lowercase a)?

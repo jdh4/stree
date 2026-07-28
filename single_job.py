@@ -1,6 +1,7 @@
 import subprocess
 from typing import List
 from typing import Dict
+import sprio_weights
 
 
 class SingleJobBreakdown:
@@ -47,10 +48,16 @@ class SingleJobBreakdown:
         #print("Let's look at your current highest priority job.")
         #print("USER  JOBID  QOS  AGE  JOBSIZE")
         #print(f'{self.job_dict["USER"]} {self.job_dict["JOBID"]} {self.job_dict["QOS"]} {self.job_dict["AGE"]} {self.job_dict["JOBSIZE"]}\n')
+        sprio_tracker = sprio_weights.SprioWeights()
+        sprio_tracker.fetch_live()
+        w_a = sprio_tracker.weights['AGE']
+        w_q = sprio_tracker.weights['QOS']
+        w_j = sprio_tracker.weights['JOBSIZE']
+        w_f = sprio_tracker.weights['FAIRSHARE']
         print("Job priority is calculated as a weighted sum:\n")
-        print("   priority = w_a * AGE + w_q * QOS + w_j * JOBSIZE + w_f * FAIRSHARE")
-        print(f"   priority = w_a * AGE + w_q * QOS + w_j * JOBSIZE + 12000 * {self.fairshare}")
-        print(f"   priority = w_a * AGE + w_q * QOS + w_j * JOBSIZE + {round(12000 * float(self.fairshare))}")
+        print("   priority = w_a * AGE + w_q * QOS / QOS_max + w_j * JOBSIZE + w_f * FAIRSHARE")
+        print(f"   priority = {w_a} * AGE + {w_q} * QOS / QOS_max + {w_j} * JOBSIZE + {w_f} * {self.fairshare}")
+        print(f"   priority = {w_a} * AGE + {w_q} * QOS / QOS_max + {w_j} * JOBSIZE + {round(w_f * float(self.fairshare))}")
         print("")
         # sprio -S 'Y'
         print("Jobs typically need a priority of 13000 to begin running.")

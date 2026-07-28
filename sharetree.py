@@ -384,8 +384,8 @@ class ShareTree:
             minmax.append(mnmx)
 
         if len(set(shares)) > 1:
-            shares = self.add_proportions(shares, decimals)
-        usage_props = self.add_proportions(usage, decimals=0)
+            shares = self.add_proportions(shares, decimals=decimals)
+        usage_props = self.add_proportions(usage, decimals=decimals)
 
         all_users = True if all([ch.is_leaf() and "(--)" not in ch.identifier
                                  for ch in self.tree.children(node_id)]) else False
@@ -396,6 +396,7 @@ class ShareTree:
 
         tb = " " * 5 * tabbing
         if fields == ("Account", "Shares", "Usage", "LevelFS", "ActiveUsers") and sort_by == "RawShares":
+            #account = ["--" if usr != "--" else acc for acc, usr in zip(account, user)]
             # show accounts sorted by shares
             columns = {"Account": account,
                        "Shares": shares,
@@ -431,20 +432,21 @@ class ShareTree:
                                       caption=caption)
             return table
         elif mixed:
+            account = ["--" if usr != "--" else acc for acc, usr in zip(account, user)]
             columns = {"Account": account,
                        "User": user,
                        "Usage": usage_props,
                        "LevelFS": lfs,
                        "Fairshare": fair}
-            caption_raw = ("Mixed accounts with users.")
+            caption_raw = ("This level of the sshare tree contains accounts and users.")
             caption = textwrap.TextWrapper(width=output_width).fill(caption_raw)
             table = self.create_table(columns,
                                       show_zero_usage=True,
                                       vertical_line=vertical_line,
                                       indent=tb,
                                       user_to_color=user_to_color,
+                                      accounts_to_color=accounts_to_color,
                                       caption=caption)
-                                      #accounts_to_color=accounts_to_color,
             return table
         else:
             columns = {"Account": account,
@@ -669,7 +671,7 @@ class ShareTree:
         elif fs >= 0.0 and fs < 0.25:
             msg = (f"Bad news! Your fairshare "
                    f"rank is {rank} users which puts you in the {direction} {pct} percentile. You should expect "
-                   "long queue times. The tree at the top helps explain why your fairshare is low.")
+                   "long queue times.")
         # Fairshare varies between 0 to 1. The larger the value the larger the contribution to job priority
         return wrapper.fill(msg)
 
