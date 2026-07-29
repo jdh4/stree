@@ -20,3 +20,8 @@ If need to get cluster name to distinguish different sshare outputs:
 ```
 scontrol show config | grep '^ClusterName'
 ```
+
+# PEARC 2026 Slides and Paper
+"Getting the Most Out of Your GPUs"
+- [Slides](https://researchcomputing.princeton.edu/document/6891)
+- [Paper](https://dl.acm.org/doi/10.1145/3785462.3815871)
